@@ -36,6 +36,7 @@ class PaymentService
             'amount' => $data['amount'],
             'currency' => $data['currency'] ?? 'USD',
             'period_months' => $data['period_months'] ?? null,
+            'plan_name' => $data['plan_name'] ?? null,
             'payment_method' => $data['payment_method'] ?? null,
             'payment_method_id' => $data['payment_method_id'] ?? null,
             'transaction_number' => $data['transaction_number'] ?? null,
@@ -121,10 +122,14 @@ class PaymentService
             // Renew subscription in Radius if period_months is provided
             // This happens even for deferred payments (renewal happens, but revenue is added later)
             if ($periodMonths && $periodMonths > 0) {
+                // Determine paid_status based on payment status
+                $paidStatus = $paymentRequest->is_paid ? 'paid' : 'unpaid';
+                
                 $renewed = $this->radiusSyncService->renewSubscription(
                     $user->username,
                     $periodMonths,
-                    $planName
+                    $planName,
+                    $paidStatus
                 );
 
                 if ($renewed) {
@@ -187,7 +192,7 @@ class PaymentService
     public function getUserPaymentRequests(AppUser $user, ?int $status = null, ?string $currency = null): \Illuminate\Contracts\Pagination\LengthAwarePaginator
     {
         $query = PaymentRequest::where('user_id', $user->id)
-            ->with(['paymentMethod', 'reviewer', 'creator'])
+            ->with(['paymentMethod', 'reviewer', 'creator', 'partialPayments.creator'])
             ->orderBy('created_at', 'desc');
 
         if ($status !== null) {
@@ -204,7 +209,14 @@ class PaymentService
     /**
      * Get all payment requests (for admin/accountant).
      */
-    public function getAllPaymentRequests(?int $status = null, ?bool $isPaid = null, ?bool $isDeferred = null, ?string $currency = null): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    public function getAllPaymentRequests(
+        ?int $status = null, 
+        ?bool $isPaid = null, 
+        ?bool $isDeferred = null, 
+        ?string $currency = null,
+        ?string $search = null,
+        ?int $periodMonths = null
+    ): \Illuminate\Contracts\Pagination\LengthAwarePaginator
     {
         $query = PaymentRequest::with(['user', 'paymentMethod', 'reviewer', 'creator'])
             ->orderBy('created_at', 'desc');
@@ -223,6 +235,21 @@ class PaymentService
 
         if ($currency !== null) {
             $query->where('currency', $currency);
+        }
+
+        // Filter by period_months
+        if ($periodMonths !== null) {
+            $query->where('period_months', $periodMonths);
+        }
+
+        // Search by username, firstname, phone, or email
+        if ($search !== null && $search !== '') {
+            $query->whereHas('user', function ($q) use ($search) {
+                $q->where('username', 'like', "%{$search}%")
+                    ->orWhere('firstname', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            });
         }
 
         return $query->paginate(15);

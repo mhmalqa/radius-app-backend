@@ -18,8 +18,15 @@ class NotificationService
      */
     public function createNotification(array $data, ?array $userIds = null, string $targetType = 'all'): Notification
     {
-        return DB::transaction(function () use ($data, $userIds, $targetType) {
-            $notification = Notification::create([
+        Log::info('Creating notification', [
+            'title' => $data['title'] ?? 'N/A',
+            'type' => $data['type'] ?? 'manual',
+            'target_type' => $targetType,
+            'user_ids_count' => $userIds ? count($userIds) : 0,
+        ]);
+
+        $notification = DB::transaction(function () use ($data) {
+            return Notification::create([
                 'title' => $data['title'],
                 'body' => $data['body'],
                 'type' => $data['type'] ?? 'manual',
@@ -31,16 +38,30 @@ class NotificationService
                 'badge' => $data['badge'] ?? null,
                 'created_by' => $data['created_by'] ?? null,
             ]);
+        });
 
-            // Send based on target type
+        Log::info('Notification created, starting send process', [
+            'notification_id' => $notification->id,
+            'target_type' => $targetType,
+        ]);
+
+        // Send based on target type (outside transaction to avoid blocking)
+        try {
             match ($targetType) {
                 'specific' => $this->sendToUsers($notification, $userIds ?? []),
                 'active' => $this->sendToActiveUsers($notification),
                 default => $this->sendToAllUsers($notification),
             };
+        } catch (\Exception $e) {
+            Log::error('Failed to send notifications', [
+                'notification_id' => $notification->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            // Don't throw - notification is already created
+        }
 
-            return $notification;
-        });
+        return $notification;
     }
 
     /**
@@ -53,6 +74,11 @@ class NotificationService
                 $query->where('expiration_at', '>', now());
             })
             ->get();
+
+        Log::info('Sending notification to active users', [
+            'notification_id' => $notification->id,
+            'users_count' => $users->count(),
+        ]);
 
         foreach ($users as $user) {
             $this->attachNotificationToUser($notification, $user);
@@ -68,6 +94,12 @@ class NotificationService
             ->where('is_active', true)
             ->get();
 
+        Log::info('Sending notification to specific users', [
+            'notification_id' => $notification->id,
+            'requested_user_ids' => $userIds,
+            'found_users_count' => $users->count(),
+        ]);
+
         foreach ($users as $user) {
             $this->attachNotificationToUser($notification, $user);
         }
@@ -79,6 +111,11 @@ class NotificationService
     public function sendToAllUsers(Notification $notification): void
     {
         $users = AppUser::where('is_active', true)->get();
+
+        Log::info('Sending notification to all active users', [
+            'notification_id' => $notification->id,
+            'users_count' => $users->count(),
+        ]);
 
         foreach ($users as $user) {
             $this->attachNotificationToUser($notification, $user);
@@ -96,6 +133,12 @@ class NotificationService
                 'is_sent' => false,
             ]);
 
+            Log::info('Notification attached to user, sending push notification', [
+                'notification_id' => $notification->id,
+                'user_id' => $user->id,
+                'title' => $notification->title,
+            ]);
+
             // Send push notification
             $this->sendPushNotification($notification, $user);
         } catch (\Exception $e) {
@@ -103,6 +146,7 @@ class NotificationService
                 'notification_id' => $notification->id,
                 'user_id' => $user->id,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
         }
     }
@@ -112,21 +156,96 @@ class NotificationService
      */
     protected function sendPushNotification(Notification $notification, AppUser $user): void
     {
-        // TODO: Implement push notification sending
-        // This would integrate with FCM, APNS, or similar service
-        
         try {
+            Log::info('Starting push notification send', [
+                'notification_id' => $notification->id,
+                'user_id' => $user->id,
+                'title' => $notification->title,
+            ]);
+
             // Get active device tokens
             $deviceTokens = $user->deviceTokens()->where('is_active', true)->get();
 
-            foreach ($deviceTokens as $deviceToken) {
-                // Send push notification
-                // Example: FCM::send($deviceToken->device_token, $notification);
-                
-                // Mark as sent
-                $notification->users()->updateExistingPivot($user->id, [
-                    'is_sent' => true,
-                    'sent_at' => now(),
+            Log::info('Device tokens retrieved', [
+                'user_id' => $user->id,
+                'notification_id' => $notification->id,
+                'tokens_count' => $deviceTokens->count(),
+            ]);
+
+            if ($deviceTokens->isEmpty()) {
+                Log::warning('No active device tokens for user - notification will not be sent via FCM', [
+                    'user_id' => $user->id,
+                    'notification_id' => $notification->id,
+                    'username' => $user->username,
+                ]);
+                return;
+            }
+
+            $fcmService = app(\App\Services\FirebaseMessagingService::class);
+            
+            Log::info('FCM service initialized, preparing notification data', [
+                'notification_id' => $notification->id,
+                'user_id' => $user->id,
+            ]);
+
+            // Prepare notification data
+            $notificationData = [
+                'title' => $notification->title,
+                'body' => $notification->body,
+                'sound' => $notification->sound ?? 'default',
+                'badge' => $notification->badge,
+                'icon' => $notification->icon,
+            ];
+
+            // Prepare data payload
+            $data = [
+                'notification_id' => (string) $notification->id,
+                'type' => $notification->type,
+                'priority' => (string) $notification->priority,
+                'action_url' => $notification->action_url ?? '',
+                'action_text' => $notification->action_text ?? '',
+            ];
+
+            // Send to all device tokens
+            $tokens = $deviceTokens->pluck('device_token')->toArray();
+            
+            Log::info('Sending FCM notification to devices', [
+                'notification_id' => $notification->id,
+                'user_id' => $user->id,
+                'tokens_count' => count($tokens),
+                'tokens_preview' => array_map(fn($t) => substr($t, 0, 20) . '...', array_slice($tokens, 0, 3)),
+            ]);
+            
+            $results = $fcmService->sendToDevices($tokens, $notificationData, $data);
+
+            Log::info('FCM send completed, processing results', [
+                'notification_id' => $notification->id,
+                'user_id' => $user->id,
+                'results_count' => count($results),
+                'results' => $results,
+            ]);
+
+            // Update sent status - check if all results are true
+            // $results is an array with tokens as keys and boolean as values
+            $allSent = !empty($results) && !in_array(false, array_values($results), true);
+            $notification->users()->updateExistingPivot($user->id, [
+                'is_sent' => $allSent,
+                'sent_at' => now(),
+            ]);
+
+            if (!$allSent) {
+                $failedTokens = array_keys(array_filter($results, fn($result) => $result === false));
+                Log::warning('Some FCM notifications failed', [
+                    'user_id' => $user->id,
+                    'notification_id' => $notification->id,
+                    'failed_tokens_count' => count($failedTokens),
+                    'total_tokens' => count($tokens),
+                ]);
+            } else {
+                Log::info('All FCM notifications sent successfully', [
+                    'user_id' => $user->id,
+                    'notification_id' => $notification->id,
+                    'tokens_count' => count($tokens),
                 ]);
             }
         } catch (\Exception $e) {
@@ -134,6 +253,7 @@ class NotificationService
                 'notification_id' => $notification->id,
                 'user_id' => $user->id,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             // Mark error

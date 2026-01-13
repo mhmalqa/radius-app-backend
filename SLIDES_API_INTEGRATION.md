@@ -1,146 +1,387 @@
-# 🔗 دليل ربط إدارة السلايدات بلوحة التحكم
+# 🎨 API: ربط السلايدات (Slides) لتطبيق المستخدم
 
-## 📍 نقاط النهاية (API Endpoints)
+## 📍 الروابط
 
-### 1. إنشاء سلايد جديد
+### عرض السلايدات
 ```
-POST /api/admin/slides
-Content-Type: multipart/form-data
-Authorization: Bearer {token}
+GET /api/slides?target_audience=all
 ```
 
-### 2. تحديث سلايد
+### تتبع النقر على السلايد
 ```
-PUT /api/admin/slides/{id}
-Content-Type: multipart/form-data
-Authorization: Bearer {token}
-```
-
-### 3. حذف سلايد
-```
-DELETE /api/admin/slides/{id}
-Authorization: Bearer {token}
-```
-
-### 4. عرض السلايدات (للعرض في لوحة التحكم)
-```
-GET /api/slides
-Authorization: Bearer {token}
+POST /api/slides/{id}/track-click
+Authorization: Bearer {token} (اختياري)
 ```
 
 ---
 
-## 📋 الحقول وأنواع البيانات
+## 📤 Request
 
-### الحقول المطلوبة (Required)
+### عرض السلايدات
 
-| الحقل | النوع | الوصف |
-|------|------|-------|
-| `title` | string | عنوان السلايد (الحد الأقصى: 150 حرف) |
-| `image` | file | الصورة الرئيسية (jpeg, jpg, png, webp - الحد الأقصى: 5MB) |
+**Headers:**
+```
+Authorization: Bearer {token} (اختياري - للمستخدمين المسجلين)
+```
 
-**ملاحظة**: عند التحديث (PUT)، حقل `image` يصبح اختياري
+**Query Parameters (اختيارية):**
+- `target_audience`: `all` | `active_users` | `expired_users`
 
----
+**مثال:**
+```javascript
+// جلب جميع السلايدات
+const response = await fetch('https://api.example.com/api/slides');
 
-### الحقول الاختيارية (Optional)
-
-| الحقل | النوع | القيمة الافتراضية | الوصف |
-|------|------|------------------|-------|
-| `image_mobile` | file | null | صورة للموبايل (jpeg, jpg, png, webp - الحد الأقصى: 5MB) |
-| `image_desktop` | file | null | صورة للديسكتوب (jpeg, jpg, png, webp - الحد الأقصى: 5MB) |
-| `link_url` | string (URL) | null | رابط عند الضغط على السلايد (الحد الأقصى: 255 حرف) |
-| `is_active` | boolean | true | تفعيل/تعطيل السلايد |
-| `target_audience` | string | 'all' | الجمهور المستهدف: `'all'` أو `'active_users'` أو `'expired_users'` |
-| `sort_order` | integer | 0 | ترتيب العرض (الأقل = الأول) |
-| `start_at` | datetime | null | تاريخ ووقت بداية العرض (صيغة: Y-m-d H:i:s) |
-| `end_at` | datetime | null | تاريخ ووقت نهاية العرض (يجب أن يكون بعد start_at) |
-
----
-
-## 🔐 متطلبات المصادقة
-
-- **الصلاحيات**: المدير فقط (Admin - Role: 2)
-- **نوع المصادقة**: Bearer Token
-- **إرسال Token**: في Header باسم `Authorization`
-
----
-
-## 📤 مثال على الطلب (Create)
-
-```http
-POST /api/admin/slides
-Content-Type: multipart/form-data
-Authorization: Bearer 1|xxxxxxxxxxxxx
-
-Form Data:
-- title: "عرض خاص"
-- image: [file]
-- image_mobile: [file] (optional)
-- image_desktop: [file] (optional)
-- link_url: "https://example.com"
-- is_active: true
-- target_audience: "all"
-- sort_order: 1
-- start_at: "2025-01-01 00:00:00"
-- end_at: "2025-01-31 23:59:59"
+// جلب سلايدات للمستخدمين النشطين فقط
+const response = await fetch('https://api.example.com/api/slides?target_audience=active_users');
 ```
 
 ---
 
-## 📥 مثال على الاستجابة (Success)
+## 📥 Response
+
+### ✅ Success Response (200)
 
 ```json
 {
-    "success": true,
-    "message": "تم إنشاء السلايد بنجاح",
-    "data": {
-        "id": 1,
-        "title": "عرض خاص",
-        "image_path": "https://domain.com/storage/slides/xxx.jpg",
-        "image_mobile": "https://domain.com/storage/slides/xxx-mobile.jpg",
-        "image_desktop": "https://domain.com/storage/slides/xxx-desktop.jpg",
-        "link_url": "https://example.com",
-        "is_active": true,
-        "target_audience": "all",
-        "sort_order": 1,
-        "start_at": "2025-01-01T00:00:00Z",
-        "end_at": "2025-01-31T23:59:59Z",
-        "click_count": 0,
-        "created_at": "2025-01-01T10:00:00Z",
-        "updated_at": "2025-01-01T10:00:00Z"
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "title": "عرض خاص",
+      "image_path": "https://api.example.com/storage/slides/slide1.jpg",
+      "image_mobile": "https://api.example.com/storage/slides/slide1-mobile.jpg",
+      "image_desktop": "https://api.example.com/storage/slides/slide1-desktop.jpg",
+      "link_url": "https://example.com/offer",
+      "is_active": true,
+      "target_audience": "all",
+      "sort_order": 1,
+      "start_at": "2024-01-01T00:00:00.000000Z",
+      "end_at": "2024-12-31T23:59:59.000000Z",
+      "click_count": 150,
+      "created_at": "2024-01-01T10:00:00.000000Z",
+      "updated_at": "2024-01-15T14:30:00.000000Z"
     }
+  ]
 }
 ```
 
 ---
 
-## ⚠️ ملاحظات مهمة
+## 📊 شرح الحقول
 
-1. **رفع الملفات**: يجب استخدام `multipart/form-data` عند إرسال الصور
-2. **تخزين الصور**: يتم حفظ الصور في `storage/app/public/slides/`
-3. **الروابط**: يتم إرجاع روابط كاملة للصور في الاستجابة
-4. **الترتيب**: السلايدات تُعرض حسب `sort_order` ثم `created_at`
-5. **التصفية التلقائية**: عند عرض السلايدات للمستخدمين، يتم تصفية السلايدات النشطة فقط والمتاحة زمنياً
+| الحقل | النوع | الوصف |
+|------|------|-------|
+| `id` | number | معرف السلايد |
+| `title` | string | عنوان السلايد |
+| `image_path` | string | رابط الصورة الأساسية |
+| `image_mobile` | string | رابط الصورة للموبايل (اختياري) |
+| `image_desktop` | string | رابط الصورة للديسكتوب (اختياري) |
+| `link_url` | string | رابط عند النقر (اختياري) |
+| `is_active` | boolean | هل السلايد نشط |
+| `target_audience` | string | الجمهور المستهدف: `all`, `active_users`, `expired_users` |
+| `sort_order` | number | ترتيب العرض (الأقل أولاً) |
+| `start_at` | string | تاريخ بداية العرض (اختياري) |
+| `end_at` | string | تاريخ نهاية العرض (اختياري) |
+| `click_count` | number | عدد النقرات |
 
 ---
 
-## 🗄️ هيكل قاعدة البيانات
+## 🎯 تتبع النقر
 
-| العمود | النوع | Nullable | Default |
-|--------|------|----------|---------|
-| id | bigint | ❌ | - |
-| title | varchar(150) | ❌ | - |
-| image_path | varchar(255) | ❌ | - |
-| image_mobile | varchar(255) | ✅ | null |
-| image_desktop | varchar(255) | ✅ | null |
-| link_url | varchar(255) | ✅ | null |
-| is_active | boolean | ❌ | true |
-| target_audience | varchar(20) | ❌ | 'all' |
-| sort_order | integer | ❌ | 0 |
-| start_at | datetime | ✅ | null |
-| end_at | datetime | ✅ | null |
-| click_count | integer | ❌ | 0 |
-| created_at | timestamp | ❌ | - |
-| updated_at | timestamp | ❌ | - |
+### Request
+```
+POST /api/slides/{id}/track-click
+Authorization: Bearer {token} (اختياري)
+```
 
+### Response
+```json
+{
+  "success": true,
+  "message": "تم تسجيل النقرة"
+}
+```
+
+---
+
+## 💡 أمثلة الاستخدام
+
+### React Native / Expo
+```javascript
+import { useState, useEffect } from 'react';
+import { Image, TouchableOpacity, Linking } from 'react-native';
+
+function SlidesCarousel() {
+  const [slides, setSlides] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSlides();
+  }, []);
+
+  const fetchSlides = async () => {
+    try {
+      const response = await fetch('https://api.example.com/api/slides');
+      const data = await response.json();
+      if (data.success) {
+        setSlides(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching slides:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSlideClick = async (slide) => {
+    // تتبع النقر
+    if (slide.id) {
+      try {
+        await fetch(`https://api.example.com/api/slides/${slide.id}/track-click`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${userToken}` // اختياري
+          }
+        });
+      } catch (error) {
+        console.error('Error tracking click:', error);
+      }
+    }
+
+    // فتح الرابط إن وجد
+    if (slide.link_url) {
+      Linking.openURL(slide.link_url);
+    }
+  };
+
+  if (loading) return <LoadingIndicator />;
+
+  return (
+    <ScrollView horizontal pagingEnabled>
+      {slides.map((slide) => (
+        <TouchableOpacity
+          key={slide.id}
+          onPress={() => handleSlideClick(slide)}
+          activeOpacity={0.9}
+        >
+          <Image
+            source={{ 
+              uri: Platform.OS === 'ios' 
+                ? (slide.image_mobile || slide.image_path)
+                : (slide.image_mobile || slide.image_path)
+            }}
+            style={{ width: screenWidth, height: 200 }}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+```
+
+### React Web
+```jsx
+import { useState, useEffect } from 'react';
+import Slider from 'react-slick';
+
+function SlidesCarousel() {
+  const [slides, setSlides] = useState([]);
+
+  useEffect(() => {
+    fetch('https://api.example.com/api/slides')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setSlides(data.data);
+        }
+      });
+  }, []);
+
+  const handleSlideClick = async (slide) => {
+    // تتبع النقر
+    if (slide.id) {
+      fetch(`https://api.example.com/api/slides/${slide.id}/track-click`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+    }
+
+    // فتح الرابط
+    if (slide.link_url) {
+      window.open(slide.link_url, '_blank');
+    }
+  };
+
+  const settings = {
+    dots: true,
+    infinite: true,
+    speed: 500,
+    slidesToShow: 1,
+    slidesToScroll: 1,
+    autoplay: true,
+    autoplaySpeed: 3000,
+  };
+
+  return (
+    <Slider {...settings}>
+      {slides.map((slide) => (
+        <div key={slide.id} onClick={() => handleSlideClick(slide)}>
+          <img
+            src={slide.image_desktop || slide.image_path}
+            alt={slide.title}
+            style={{ width: '100%', height: '400px', objectFit: 'cover', cursor: 'pointer' }}
+          />
+        </div>
+      ))}
+    </Slider>
+  );
+}
+```
+
+### Flutter
+```dart
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
+
+class SlidesService {
+  static Future<List<Slide>> fetchSlides() async {
+    final response = await http.get(
+      Uri.parse('https://api.example.com/api/slides'),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success']) {
+        return (data['data'] as List)
+            .map((slide) => Slide.fromJson(slide))
+            .toList();
+      }
+    }
+    throw Exception('Failed to load slides');
+  }
+
+  static Future<void> trackClick(int slideId, String? token) async {
+    try {
+      await http.post(
+        Uri.parse('https://api.example.com/api/slides/$slideId/track-click'),
+        headers: token != null ? {'Authorization': 'Bearer $token'} : {},
+      );
+    } catch (e) {
+      print('Error tracking click: $e');
+    }
+  }
+
+  static Future<void> openLink(String? url) async {
+    if (url != null && await canLaunch(url)) {
+      await launch(url);
+    }
+  }
+}
+
+class Slide {
+  final int id;
+  final String title;
+  final String imagePath;
+  final String? imageMobile;
+  final String? imageDesktop;
+  final String? linkUrl;
+
+  Slide({
+    required this.id,
+    required this.title,
+    required this.imagePath,
+    this.imageMobile,
+    this.imageDesktop,
+    this.linkUrl,
+  });
+
+  factory Slide.fromJson(Map<String, dynamic> json) {
+    return Slide(
+      id: json['id'],
+      title: json['title'],
+      imagePath: json['image_path'],
+      imageMobile: json['image_mobile'],
+      imageDesktop: json['image_desktop'],
+      linkUrl: json['link_url'],
+    );
+  }
+}
+```
+
+---
+
+## 🎨 نصائح للعرض الاحترافي
+
+### 1. اختيار الصورة المناسبة
+```javascript
+// استخدم الصورة المناسبة حسب الجهاز
+const getImageUrl = (slide) => {
+  if (Platform.OS === 'web') {
+    return slide.image_desktop || slide.image_path;
+  } else {
+    return slide.image_mobile || slide.image_path;
+  }
+};
+```
+
+### 2. تصفية السلايدات حسب الجمهور
+```javascript
+const getFilteredSlides = (slides, userSubscription) => {
+  return slides.filter(slide => {
+    if (slide.target_audience === 'all') return true;
+    if (slide.target_audience === 'active_users' && userSubscription?.is_active) return true;
+    if (slide.target_audience === 'expired_users' && !userSubscription?.is_active) return true;
+    return false;
+  });
+};
+```
+
+### 3. التحقق من تاريخ الصلاحية
+```javascript
+const isSlideActive = (slide) => {
+  const now = new Date();
+  const startAt = slide.start_at ? new Date(slide.start_at) : null;
+  const endAt = slide.end_at ? new Date(slide.end_at) : null;
+  
+  if (startAt && now < startAt) return false;
+  if (endAt && now > endAt) return false;
+  
+  return slide.is_active;
+};
+```
+
+### 4. ترتيب السلايدات
+```javascript
+// ترتيب حسب sort_order
+const sortedSlides = slides.sort((a, b) => a.sort_order - b.sort_order);
+```
+
+---
+
+## ✅ Checklist للربط
+
+- [ ] جلب السلايدات عند تحميل الشاشة
+- [ ] عرض الصورة المناسبة حسب الجهاز (mobile/desktop)
+- [ ] تطبيق التصفية حسب `target_audience`
+- [ ] التحقق من `is_active` و `start_at` / `end_at`
+- [ ] ترتيب السلايدات حسب `sort_order`
+- [ ] تتبع النقر عند الضغط على السلايد
+- [ ] فتح `link_url` عند النقر (إن وجد)
+- [ ] معالجة الأخطاء بشكل صحيح
+- [ ] إضافة Loading state
+- [ ] إضافة Error state
+
+---
+
+## 📝 ملاحظات مهمة
+
+1. **المصادقة اختيارية**: يمكن جلب السلايدات بدون token، لكن تتبع النقر قد يتطلب token
+2. **الصور المتعددة**: استخدم `image_mobile` للموبايل و `image_desktop` للديسكتوب
+3. **التصفية التلقائية**: السيرفر يعيد فقط السلايدات النشطة والمتاحة زمنياً
+4. **الترتيب**: استخدم `sort_order` لعرض السلايدات بالترتيب الصحيح
+5. **الجمهور المستهدف**: راعِ `target_audience` لعرض السلايدات المناسبة لكل مستخدم

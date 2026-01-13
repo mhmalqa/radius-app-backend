@@ -26,6 +26,7 @@ class CreatePaymentRequest extends FormRequest
             'amount' => ['required', 'numeric', 'min:0.01'],
             'currency' => ['nullable', 'string', 'max:3', Rule::in(['USD', 'SYP', 'TRY'])],
             'period_months' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'plan_name' => ['nullable', 'string', 'max:100'],
             'payment_method' => ['nullable', 'string', 'max:50'],
             'payment_method_id' => ['nullable', 'integer', 'exists:payment_methods,id'],
             'transaction_number' => ['nullable', 'string', 'max:100'],
@@ -45,6 +46,7 @@ class CreatePaymentRequest extends FormRequest
             'amount.required' => 'المبلغ مطلوب',
             'amount.numeric' => 'المبلغ يجب أن يكون رقماً',
             'amount.min' => 'المبلغ يجب أن يكون أكبر من صفر',
+            'plan_name.max' => 'اسم الخطة يجب أن يكون أقل من 100 حرف',
             'receipt_file.mimes' => 'نوع الملف غير مدعوم. المسموح: jpg, jpeg, png, pdf',
             'receipt_file.max' => 'حجم الملف يجب أن يكون أقل من 5 ميجابايت',
         ];

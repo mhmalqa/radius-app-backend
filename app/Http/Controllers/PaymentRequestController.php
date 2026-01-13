@@ -8,6 +8,7 @@ use App\Http\Requests\PaymentRequest\UpdatePaymentRequestStatus;
 use App\Http\Resources\PaymentRequestResource;
 use App\Models\AppUser;
 use App\Models\PaymentRequest;
+use App\Enums\PaymentRequestStatus;
 use App\Services\PaymentService;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
@@ -97,7 +98,7 @@ class PaymentRequestController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => new PaymentRequestResource($paymentRequest->load(['user', 'paymentMethod', 'reviewer'])),
+            'data' => new PaymentRequestResource($paymentRequest->load(['user', 'paymentMethod', 'reviewer', 'partialPayments.creator'])),
         ]);
     }
 
@@ -112,6 +113,8 @@ class PaymentRequestController extends Controller
         $isPaid = $request->has('is_paid') ? $request->boolean('is_paid') : null;
         $isDeferred = $request->has('is_deferred') ? $request->boolean('is_deferred') : null;
         $currency = $request->query('currency');
+        $search = $request->query('search');
+        $periodMonths = $request->query('period_months');
         
         // Validate currency if provided
         if ($currency !== null && !in_array($currency, ['USD', 'SYP', 'TRY'])) {
@@ -121,11 +124,21 @@ class PaymentRequestController extends Controller
             ], 422);
         }
 
+        // Validate period_months if provided
+        if ($periodMonths !== null && (!is_numeric($periodMonths) || $periodMonths < 0)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'عدد الأشهر يجب أن يكون رقماً صحيحاً أكبر من أو يساوي صفر',
+            ], 422);
+        }
+
         $paymentRequests = $this->paymentService->getAllPaymentRequests(
             $status !== null ? (int) $status : null,
             $isPaid,
             $isDeferred,
-            $currency
+            $currency,
+            $search,
+            $periodMonths !== null ? (int) $periodMonths : null
         );
 
         return response()->json([
@@ -318,6 +331,102 @@ class PaymentRequestController extends Controller
                 'message' => $e->getMessage(),
             ], 400);
         }
+    }
+
+    /**
+     * Get unpaid deferred installments with amounts by currency for the authenticated user.
+     */
+    public function unpaidDeferredInstallments(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        // Get unpaid deferred installments with details
+        // Unpaid means: is_paid is false or null
+        $unpaidDeferred = PaymentRequest::where('user_id', $user->id)
+            ->where('is_deferred', true)
+            ->where(function ($query) {
+                $query->where('is_paid', false)
+                      ->orWhereNull('is_paid');
+            })
+            ->where('status', PaymentRequestStatus::APPROVED->value)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Group by currency and calculate totals
+        $byCurrency = [
+            'USD' => [
+                'installments' => [],
+                'total_amount' => 0,
+                'count' => 0,
+            ],
+            'SYP' => [
+                'installments' => [],
+                'total_amount' => 0,
+                'count' => 0,
+            ],
+            'TRY' => [
+                'installments' => [],
+                'total_amount' => 0,
+                'count' => 0,
+            ],
+        ];
+
+        foreach ($unpaidDeferred as $payment) {
+            $currency = $payment->currency ?? 'USD';
+            
+            // Calculate remaining amount (total - paid)
+            $totalAmount = $payment->approved_amount ?? $payment->amount;
+            $paidAmount = $payment->paid_amount ?? 0;
+            $remainingAmount = max(0, $totalAmount - $paidAmount);
+
+            // Add to currency group
+            if (isset($byCurrency[$currency])) {
+                $byCurrency[$currency]['installments'][] = [
+                    'id' => $payment->id,
+                    'amount' => (float) $totalAmount,
+                    'paid_amount' => (float) $paidAmount,
+                    'remaining_amount' => (float) $remainingAmount,
+                    'currency' => $currency,
+                    'period_months' => $payment->period_months,
+                    'plan_name' => $payment->plan_name,
+                    'payment_date' => $payment->payment_date?->format('Y-m-d'),
+                    'created_at' => $payment->created_at->toIso8601String(),
+                    'is_fully_paid' => $payment->isFullyPaid(),
+                ];
+                $byCurrency[$currency]['total_amount'] += $remainingAmount;
+                $byCurrency[$currency]['count']++;
+            }
+        }
+
+        // Format totals
+        $result = [];
+        foreach ($byCurrency as $currency => $data) {
+            $result[$currency] = [
+                'installments' => $data['installments'],
+                'total_amount' => round($data['total_amount'], 2),
+                'count' => $data['count'],
+            ];
+        }
+
+        // Calculate grand totals
+        $grandTotal = [
+            'USD' => $result['USD']['total_amount'],
+            'SYP' => $result['SYP']['total_amount'],
+            'TRY' => $result['TRY']['total_amount'],
+        ];
+        $totalCount = $result['USD']['count'] + $result['SYP']['count'] + $result['TRY']['count'];
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم جلب الدفعات المؤجلة غير المدفوعة بنجاح',
+            'data' => [
+                'by_currency' => $result,
+                'totals' => [
+                    'by_currency' => $grandTotal,
+                    'total_count' => $totalCount,
+                ],
+            ],
+        ]);
     }
 }
 

@@ -44,6 +44,21 @@ class PaymentRequestResource extends JsonResource
             'paid_amount' => (float) ($this->paid_amount ?? 0),
             'remaining_amount' => (float) $this->remaining_amount,
             'is_fully_paid' => $this->isFullyPaid(),
+            // تفاصيل المبالغ للدفعات المؤجلة
+            'payment_summary' => $this->when($this->is_deferred, function () {
+                $totalAmount = $this->approved_amount ?? $this->amount;
+                $paidAmount = $this->paid_amount ?? 0;
+                $remainingAmount = $this->remaining_amount;
+                
+                return [
+                    'total_amount' => (float) $totalAmount,
+                    'paid_amount' => (float) $paidAmount,
+                    'remaining_amount' => (float) $remainingAmount,
+                    'currency' => $this->currency,
+                    'payment_percentage' => $totalAmount > 0 ? round(($paidAmount / $totalAmount) * 100, 2) : 0,
+                    'is_fully_paid' => $this->isFullyPaid(),
+                ];
+            }),
             'partial_payments' => $this->when($this->relationLoaded('partialPayments'), function () {
                 return $this->partialPayments->map(function ($partial) {
                     return [
@@ -52,7 +67,7 @@ class PaymentRequestResource extends JsonResource
                         'currency' => $partial->currency,
                         'payment_date' => $partial->payment_date->format('Y-m-d'),
                         'notes' => $partial->notes,
-                        'created_by' => $partial->creator 
+                        'created_by' => $partial->relationLoaded('creator') && $partial->creator
                             ? new UserResource($partial->creator) 
                             : null,
                         'created_at' => $partial->created_at->toIso8601String(),

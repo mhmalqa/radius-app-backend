@@ -47,6 +47,7 @@ class UpdatePaymentRequestStatus extends FormRequest
             'period_months.integer' => 'عدد الأشهر يجب أن يكون رقماً صحيحاً',
             'period_months.min' => 'عدد الأشهر يجب أن يكون على الأقل شهر واحد',
             'period_months.max' => 'عدد الأشهر يجب أن يكون على الأكثر 12 شهر',
+            'plan_name.max' => 'اسم الخطة يجب أن يكون أقل من 100 حرف',
         ];
     }
 }

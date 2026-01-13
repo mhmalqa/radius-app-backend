@@ -8,6 +8,14 @@ use App\Models\PaymentMethod;
 class PaymentMethodPolicy
 {
     /**
+     * Determine if user can view any payment methods.
+     */
+    public function viewAny(AppUser $user): bool
+    {
+        return $user->isAdmin();
+    }
+
+    /**
      * Determine if user can create payment methods.
      */
     public function create(AppUser $user): bool

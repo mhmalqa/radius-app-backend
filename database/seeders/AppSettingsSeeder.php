@@ -25,6 +25,16 @@ class AppSettingsSeeder extends Seeder
                 'sort_order' => 1,
             ],
             [
+                'key' => 'whatsapp_group',
+                'value' => null,
+                'type' => 'social_link',
+                'label' => 'مجموعة الواتساب',
+                'label_en' => 'WhatsApp Group',
+                'description' => 'رابط مجموعة الواتساب الخاصة بالتطبيق',
+                'is_active' => true,
+                'sort_order' => 1,
+            ],
+            [
                 'key' => 'facebook',
                 'value' => null,
                 'type' => 'social_link',

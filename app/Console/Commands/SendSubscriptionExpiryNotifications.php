@@ -67,7 +67,7 @@ class SendSubscriptionExpiryNotifications extends Command
                 'title' => $message['title'],
                 'body' => $message['body'],
                 'type' => 'system',
-                'priority' => $hours <= 1 ? 2 : ($hours <= 24 ? 1 : 0),
+                'priority' => $hours <= 2 ? 2 : ($hours <= 24 ? 1 : 0),
                 'action_url' => '/subscription',
                 'action_text' => 'تجديد الاشتراك',
             ], [$subscription->user_id], 'specific');
@@ -95,6 +95,10 @@ class SendSubscriptionExpiryNotifications extends Command
             $hours <= 1 => [
                 'title' => '⚠️ انتهاء الاشتراك قريباً',
                 'body' => "اشتراكك سينتهي خلال ساعة واحدة ({$expirationDate}). يرجى تجديد الاشتراك لتستمر خدمة الإنترنت.",
+            ],
+            $hours <= 2 => [
+                'title' => '⚠️ انتهاء الاشتراك قريباً',
+                'body' => "اشتراكك سينتهي خلال ساعتين ({$expirationDate}). يرجى تجديد الاشتراك لتستمر خدمة الإنترنت.",
             ],
             $hours <= 24 => [
                 'title' => 'تنبيه: انتهاء الاشتراك قريباً',

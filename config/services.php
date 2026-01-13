@@ -34,6 +34,13 @@ return [
     'radius' => [
         'api_url' => env('RADIUS_API_URL', 'http://38.156.75.137:3031'),
         'api_key' => env('RADIUS_API_KEY', 'APP2025M'),
+        'renew_endpoint' => env('RADIUS_RENEW_ENDPOINT', '/radiusmanager/USERS/dash/renew_subscription.php'),
+    ],
+
+    'firebase' => [
+        'credentials_path' => env('FIREBASE_CREDENTIALS_PATH', 'storage/app/firebase/service-account-key.json'),
+        'project_id' => env('FIREBASE_PROJECT_ID'),
+        'server_key' => env('FIREBASE_SERVER_KEY'),
     ],
 
 ];

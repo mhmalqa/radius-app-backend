@@ -34,20 +34,51 @@ class SendSubscriptionExpiredNotifications extends Command
      */
     public function handle(): int
     {
-        // Find subscriptions that expired in the last hour
-        $oneHourAgo = now()->subHour();
-        $now = now();
+        $sentCount = 0;
 
-        $subscriptions = UserSubscription::whereBetween('expiration_at', [$oneHourAgo, $now])
+        // 1. إشعار أثناء فصل الخدمة (عند انتهاء الاشتراك بالضبط - نطاق 5 دقائق مضت)
+        $now = now();
+        $fiveMinutesAgo = $now->copy()->subMinutes(5);
+
+        $expiringNow = UserSubscription::whereBetween('expiration_at', [$fiveMinutesAgo, $now])
             ->whereHas('user', function ($query) {
                 $query->where('is_active', true);
             })
             ->with('user')
             ->get();
 
-        $sentCount = 0;
+        foreach ($expiringNow as $subscription) {
+            // التأكد من أن الاشتراك انتهى بالفعل
+            if (!$subscription->isExpired()) {
+                continue;
+            }
 
-        foreach ($subscriptions as $subscription) {
+            $expirationDate = $subscription->expiration_at->format('Y-m-d H:i');
+            
+            $this->notificationService->createNotification([
+                'title' => '⛔ تم فصل الخدمة',
+                'body' => "تم فصل خدمة الإنترنت الخاصة بك الآن ({$expirationDate}). يجب تجديد الاشتراك لتعود الخدمة.",
+                'type' => 'system',
+                'priority' => 2, // Urgent
+                'action_url' => '/payment-requests',
+                'action_text' => 'تجديد الآن',
+            ], [$subscription->user_id], 'specific');
+
+            $sentCount++;
+        }
+
+        // 2. إشعار بعد ربع ساعة من انتهاء الاشتراك
+        $fifteenMinutesAgo = $now->copy()->subMinutes(15);
+        $sixteenMinutesAgo = $now->copy()->subMinutes(16);
+
+        $expired15MinutesAgo = UserSubscription::whereBetween('expiration_at', [$sixteenMinutesAgo, $fifteenMinutesAgo])
+            ->whereHas('user', function ($query) {
+                $query->where('is_active', true);
+            })
+            ->with('user')
+            ->get();
+
+        foreach ($expired15MinutesAgo as $subscription) {
             if (!$subscription->isExpired()) {
                 continue;
             }
@@ -56,7 +87,7 @@ class SendSubscriptionExpiredNotifications extends Command
             
             $this->notificationService->createNotification([
                 'title' => '⛔ انتهى الاشتراك',
-                'body' => "اشتراكك انتهى في ({$expirationDate}). يجب تجديد الاشتراك لتعود خدمة الإنترنت.",
+                'body' => "اشتراكك انتهى منذ ربع ساعة ({$expirationDate}). يجب تجديد الاشتراك لتعود خدمة الإنترنت.",
                 'type' => 'system',
                 'priority' => 2, // Urgent
                 'action_url' => '/payment-requests',
@@ -69,6 +100,8 @@ class SendSubscriptionExpiredNotifications extends Command
         $this->info("تم إرسال {$sentCount} إشعار");
         Log::info("Subscription expired notifications sent", [
             'count' => $sentCount,
+            'expiring_now' => $expiringNow->count(),
+            'expired_15min_ago' => $expired15MinutesAgo->count(),
         ]);
 
         return 0;

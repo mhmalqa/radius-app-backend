@@ -24,6 +24,22 @@ class LiveStreamController extends Controller
         // Get user from request (works even if route is not protected by auth middleware)
         // Try to get authenticated user from Sanctum guard
         $user = $request->user() ?? auth('sanctum')->user();
+
+        // إذا كان المستخدم مسجلاً ولكن حسابه معطل، لا نعرض له أي بثوث
+        if ($user && !$user->is_active) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حسابك معطل، لا يمكنك مشاهدة البثوث. يرجى التواصل مع فريق الدعم.',
+                'data' => [],
+                'meta' => [
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => 15,
+                    'total' => 0,
+                ],
+            ], 403);
+        }
+
         $query = LiveStream::query();
 
 

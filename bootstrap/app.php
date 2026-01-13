@@ -16,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\CheckRole::class,
             'account.active' => \App\Http\Middleware\CheckAccountActive::class,
         ]);
+
+        // منع محاولة إعادة التوجيه إلى Route باسم login في طلبات الـ API
+        // نمرّر دالة ترجع null بدلاً من مسار، فيتصرّف Laravel بإرجاع 401 JSON بدون Redirect.
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

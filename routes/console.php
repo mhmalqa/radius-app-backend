@@ -9,10 +9,11 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote')->hourly();
 
 // Subscription expiry notifications
-Schedule::command('notifications:subscription-expiry --hours=48')->dailyAt('09:00'); // 2 days before
-Schedule::command('notifications:subscription-expiry --hours=24')->dailyAt('09:00'); // 1 day before
-Schedule::command('notifications:subscription-expiry --hours=1')->hourly(); // 1 hour before
-Schedule::command('notifications:subscription-expired')->hourly(); // After expiry
+Schedule::command('notifications:subscription-expiry --hours=48')->dailyAt('09:00'); // قبل يومين
+Schedule::command('notifications:subscription-expiry --hours=24')->dailyAt('09:00'); // قبل يوم
+Schedule::command('notifications:subscription-expiry --hours=2')->hourly(); // قبل ساعتين
+Schedule::command('notifications:subscription-expiry --hours=1')->hourly(); // قبل ساعة
+Schedule::command('notifications:subscription-expired')->everyFiveMinutes(); // أثناء فصل الخدمة وبعد ربع ساعة
 
 // Live stream day notifications
 Schedule::command('notifications:live-stream-day')->dailyAt('08:00'); // Send at 8 AM for streams starting today

@@ -6,6 +6,7 @@ use App\Http\Controllers\CashWithdrawalController;
 use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeviceTokenController;
 use App\Http\Controllers\LiveStreamController;
 use App\Http\Controllers\MaintenanceRequestController;
 use App\Http\Controllers\NotificationController;
@@ -54,8 +55,18 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
         Route::put('/profile', [UserController::class, 'updateProfile']);
         Route::post('/sync-subscription', [UserController::class, 'syncSubscription']);
         Route::get('/subscription-from-radius', [UserController::class, 'getSubscriptionFromRadius']);
+        Route::get('/services-from-radius', [UserController::class, 'getServicesFromRadius']);
+        Route::get('/plan-by-username', [UserController::class, 'getUserPlanByUsername']);
         Route::get('/revenues', [RevenueController::class, 'userRevenues']);
         Route::get('/payments', [PaymentRequestController::class, 'index']);
+        Route::get('/unpaid-deferred-installments', [PaymentRequestController::class, 'unpaidDeferredInstallments']);
+        
+        // Device tokens
+        Route::prefix('device-tokens')->group(function () {
+            Route::get('/', [DeviceTokenController::class, 'index']);
+            Route::post('/', [DeviceTokenController::class, 'register']);
+            Route::delete('/{deviceToken}', [DeviceTokenController::class, 'remove']);
+        });
     });
 
     // Payment requests routes
@@ -173,6 +184,7 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
 
         // Payment methods management
         Route::prefix('admin/payment-methods')->group(function () {
+            Route::get('/', [PaymentMethodController::class, 'adminIndex']);
             Route::post('/', [PaymentMethodController::class, 'store']);
             Route::put('/{paymentMethod}', [PaymentMethodController::class, 'update']);
             Route::post('/{paymentMethod}/update', [PaymentMethodController::class, 'update']); // POST route for form-data

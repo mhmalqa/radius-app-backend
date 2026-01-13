@@ -21,20 +21,28 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        $user = $this->authService->login(
+        $result = $this->authService->login(
             $request->username,
             $request->password,
             $request->ip(),
             $request->userAgent()
         );
 
-        if (!$user) {
+        if (!$result['success']) {
+            // تحديد رسالة الخطأ حسب نوع الخطأ
+            $message = match ($result['error']) {
+                'account_disabled' => 'حسابك معطل. يرجى التواصل مع فريق الدعم لتفعيل حسابك.',
+                'invalid_credentials' => 'بيانات الدخول غير صحيحة. يرجى التحقق من اسم المستخدم وكلمة المرور.',
+                default => 'فشل تسجيل الدخول. يرجى المحاولة مرة أخرى.',
+            };
+
             return response()->json([
                 'success' => false,
-                'message' => 'بيانات الدخول غير صحيحة',
+                'message' => $message,
             ], 401);
         }
 
+        $user = $result['user'];
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
@@ -66,6 +74,8 @@ class AuthController extends Controller
                 ],
             ], 201);
         } catch (\Exception $e) {
+            // Return the specific error message from the service
+            // This will be a clear, user-friendly message explaining the exact reason for failure
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),

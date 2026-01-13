@@ -6,6 +6,7 @@ use App\Http\Requests\PaymentMethod\CreatePaymentMethodRequest;
 use App\Http\Resources\PaymentMethodResource;
 use App\Models\PaymentMethod;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class PaymentMethodController extends Controller
@@ -17,6 +18,35 @@ class PaymentMethodController extends Controller
     {
         $paymentMethods = PaymentMethod::where('is_active', true)
             ->orderBy('sort_order')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => PaymentMethodResource::collection($paymentMethods),
+        ]);
+    }
+
+    /**
+     * Get all payment methods for admin (including inactive).
+     */
+    public function adminIndex(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', PaymentMethod::class);
+
+        $query = PaymentMethod::query();
+
+        // Filter by is_active
+        if ($request->has('is_active')) {
+            $query->where('is_active', $request->boolean('is_active'));
+        }
+
+        // Filter by code
+        if ($request->has('code')) {
+            $query->where('code', $request->code);
+        }
+
+        $paymentMethods = $query->orderBy('sort_order')
+            ->orderBy('created_at', 'desc')
             ->get();
 
         return response()->json([
@@ -84,15 +114,15 @@ class PaymentMethodController extends Controller
         $allowedFields = [
             'name', 'name_ar', 'code', 'is_active', 'instructions', 'sort_order'
         ];
-        
+
         // Get data from request (works with both JSON and form-data)
         $allInput = $request->all();
         $requestData = [];
-        
+
         foreach ($allowedFields as $field) {
             if (array_key_exists($field, $allInput)) {
                 $value = $request->input($field);
-                
+
                 // Convert string booleans to actual booleans
                 if ($field === 'is_active') {
                     if (is_string($value)) {
@@ -106,7 +136,7 @@ class PaymentMethodController extends Controller
                 }
             }
         }
-        
+
         // Get validated data and merge
         $validatedData = $request->validated();
         $data = array_merge($requestData, $validatedData);

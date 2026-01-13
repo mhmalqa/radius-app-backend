@@ -14,24 +14,38 @@ class AuthService
     ) {}
     /**
      * Attempt to login user.
+     * 
+     * @return array{success: bool, user: ?AppUser, error: ?string}
      */
-    public function login(string $username, string $password, string $ipAddress, ?string $userAgent = null): ?AppUser
+    public function login(string $username, string $password, string $ipAddress, ?string $userAgent = null): array
     {
         $user = AppUser::where('username', $username)->first();
 
         if (!$user) {
             $this->logLoginAttempt($username, $ipAddress, $userAgent, false, 'User not found');
-            return null;
+            return [
+                'success' => false,
+                'user' => null,
+                'error' => 'invalid_credentials',
+            ];
         }
 
         if (!$user->is_active) {
             $this->logLoginAttempt($username, $ipAddress, $userAgent, false, 'Account is inactive', $user->id);
-            return null;
+            return [
+                'success' => false,
+                'user' => null,
+                'error' => 'account_disabled',
+            ];
         }
 
         if (!Hash::check($password, $user->password)) {
             $this->logLoginAttempt($username, $ipAddress, $userAgent, false, 'Invalid password', $user->id);
-            return null;
+            return [
+                'success' => false,
+                'user' => null,
+                'error' => 'invalid_credentials',
+            ];
         }
 
         // Update last login
@@ -40,7 +54,11 @@ class AuthService
         // Log successful login
         $this->logLoginAttempt($username, $ipAddress, $userAgent, true, null, $user->id);
 
-        return $user;
+        return [
+            'success' => true,
+            'user' => $user,
+            'error' => null,
+        ];
     }
 
     /**
@@ -51,13 +69,21 @@ class AuthService
     public function register(array $data): AppUser
     {
         // Check if user already exists in our application
+        // Note: This is a double-check since RegisterRequest already validates this,
+        // but we keep it for security and to provide a clear error message
         $existingUser = AppUser::where('username', $data['username'])->first();
         if ($existingUser) {
-            throw new \Exception('المستخدم مسجل بالفعل في التطبيق.');
+            throw new \Exception('اسم المستخدم مستخدم بالفعل. يرجى استخدام اسم مستخدم آخر أو تسجيل الدخول إذا كان لديك حساب.');
         }
 
-        // Check if user exists in Radius and get data
-        if (!$this->radiusSyncService->userExistsInRadius($data['username'])) {
+        // Check if user exists in Radius
+        $userExistsResult = $this->radiusSyncService->userExistsInRadius($data['username']);
+        
+        if ($userExistsResult === 'connection_error') {
+            throw new \Exception('فشل الاتصال بنظام Radius. يرجى المحاولة مرة أخرى لاحقاً أو الاتصال بالدعم الفني.');
+        }
+        
+        if ($userExistsResult === false) {
             throw new \Exception('اسم المستخدم غير موجود في نظام Radius. يرجى التحقق من اسم المستخدم.');
         }
 
@@ -65,7 +91,7 @@ class AuthService
         $radiusData = $this->radiusSyncService->getUserDataFromRadius($data['username']);
 
         if (!$radiusData) {
-            throw new \Exception('فشل في جلب بيانات المستخدم من نظام Radius.');
+            throw new \Exception('فشل في جلب بيانات المستخدم من نظام Radius. يرجى المحاولة مرة أخرى أو الاتصال بالدعم الفني.');
         }
 
         // Use phone from Radius if not provided in registration

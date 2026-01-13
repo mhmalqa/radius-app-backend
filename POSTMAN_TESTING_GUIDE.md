@@ -1,329 +1,389 @@
-# 🧪 دليل اختبار API باستخدام Postman
+# 🧪 دليل اختبار API على Postman
 
-## 🔐 المصادقة (Authentication)
+## 📋 نظرة عامة
 
-### 1. تسجيل الدخول كمدير
+هذا الدليل يوضح كيفية اختبار API تجديد الاشتراك من Radius باستخدام Postman.
 
-**Method**: `POST`  
-**URL**: `http://your-domain.com/api/auth/login`  
-**Headers**:
+---
+
+## 🔐 الخطوة 1: تسجيل الدخول للحصول على Token
+
+### إعدادات الطلب
+
+-   **Method:** `POST`
+-   **URL:** `http://your-backend-url/api/auth/login`
+
+### Headers
 
 ```
+Accept: application/json
 Content-Type: application/json
 ```
 
-**Body** (raw JSON):
+### Body (raw JSON)
 
 ```json
 {
-    "username": "admin001",
+    "username": "your_username",
     "password": "your_password"
 }
 ```
 
-**الاستجابة**: ستحصل على `token` - احفظه للاستخدام في الطلبات التالية
-
----
-
-## 🖼️ اختبار السلايدات (Slides)
-
-### 1. عرض جميع السلايدات (للمدير)
-
-**Method**: `GET`  
-**URL**: `http://your-domain.com/api/admin/slides`  
-**Headers**:
-
-```
-Authorization: Bearer {your_token}
-```
-
-**Query Parameters** (اختياري):
-
--   `is_active`: `true` أو `false`
--   `target_audience`: `all`, `active_users`, `expired_users`
--   `per_page`: `15`
--   `page`: `1`
-
----
-
-### 2. إنشاء سلايد جديد
-
-**Method**: `POST`  
-**URL**: `http://your-domain.com/api/admin/slides`  
-**Headers**:
-
-```
-Authorization: Bearer {your_token}
-Content-Type: multipart/form-data
-```
-
-**Body** (form-data):
-
--   `title`: `"عرض خاص"` (text)
--   `image`: [اختر ملف صورة] (file)
--   `image_mobile`: [اختر ملف صورة] (file - optional)
--   `image_desktop`: [اختر ملف صورة] (file - optional)
--   `link_url`: `"https://example.com"` (text - optional)
--   `is_active`: `true` (text - optional)
--   `target_audience`: `"all"` (text - optional)
--   `sort_order`: `1` (text - optional)
--   `start_at`: `"2025-12-15 00:00:00"` (text - optional)
--   `end_at`: `"2025-12-31 23:59:59"` (text - optional)
-
----
-
-### 3. تحديث سلايد
-
-**Method**: `PUT`  
-**URL**: `http://your-domain.com/api/admin/slides/{id}`  
-**Headers**:
-
-```
-Authorization: Bearer {your_token}
-Content-Type: multipart/form-data
-```
-
-**Body** (form-data):
-
--   `title`: `"عنوان محدث"` (text - optional)
--   `image`: [اختر ملف صورة جديد] (file - optional)
--   `image_mobile`: [اختر ملف صورة] (file - optional)
--   `image_desktop`: [اختر ملف صورة] (file - optional)
--   `is_active`: `false` (text - optional)
--   أي حقل آخر تريد تحديثه
-
-**مثال**: `PUT /api/admin/slides/1`
-
----
-
-### 4. حذف سلايد
-
-**Method**: `DELETE`  
-**URL**: `http://your-domain.com/api/admin/slides/{id}`  
-**Headers**:
-
-```
-Authorization: Bearer {your_token}
-```
-
-**مثال**: `DELETE /api/admin/slides/1`
-
----
-
-## 📺 اختبار البثوث المباشرة (Live Streams)
-
-### 1. عرض جميع البثوث (للمدير)
-
-**Method**: `GET`  
-**URL**: `http://your-domain.com/api/admin/live-streams`  
-**Headers**:
-
-```
-Authorization: Bearer {your_token}
-```
-
-**Query Parameters** (اختياري):
-
--   `is_active`: `true` أو `false`
--   `access_type`: `all_subscribers`, `live_subscribers_only`
--   `category`: `match`, `channel`, `event`
--   `featured`: `true` أو `false`
--   `per_page`: `15`
--   `page`: `1`
-
----
-
-### 2. إنشاء بث مباشر جديد
-
-**Method**: `POST`  
-**URL**: `http://your-domain.com/api/admin/live-streams`  
-**Headers**:
-
-```
-Authorization: Bearer {your_token}
-Content-Type: multipart/form-data
-```
-
-**Body** (form-data):
-
--   `title`: `"مباراة اليوم"` (text - required)
--   `stream_url`: `"https://example.com/stream.m3u8"` (text - required)
--   `description`: `"وصف البث"` (text - optional)
--   `thumbnail`: [اختر ملف صورة] (file - optional)
--   `access_type`: `"all_subscribers"` (text - optional)
--   `category`: `"match"` (text - optional)
--   `stream_type`: `"live"` (text - optional)
--   `is_active`: `true` (text - optional)
--   `is_featured`: `true` (text - optional)
--   `start_time`: `"2025-12-15 20:00:00"` (text - optional)
--   `end_time`: `"2025-12-15 22:00:00"` (text - optional)
--   `max_viewers`: `1000` (text - optional)
--   `sort_order`: `1` (text - optional)
-
----
-
-### 3. تحديث بث مباشر
-
-**Method**: `PUT`  
-**URL**: `http://your-domain.com/api/admin/live-streams/{id}`  
-**Headers**:
-
-```
-Authorization: Bearer {your_token}
-Content-Type: multipart/form-data
-```
-
-**Body** (form-data):
-
--   `title`: `"عنوان محدث"` (text - optional)
--   `thumbnail`: [اختر ملف صورة جديد] (file - optional)
--   `is_active`: `false` (text - optional)
--   أي حقل آخر تريد تحديثه
-
-**مثال**: `PUT /api/admin/live-streams/1`
-
-**ملاحظة مهمة**: عند تحديث الصورة، تأكد من:
-
-1. اختيار `form-data` في Postman
-2. إضافة `thumbnail` كـ **File** (وليس Text)
-3. اختيار ملف صورة صالح
-
----
-
-### 4. حذف بث مباشر
-
-**Method**: `DELETE`  
-**URL**: `http://your-domain.com/api/admin/live-streams/{id}`  
-**Headers**:
-
-```
-Authorization: Bearer {your_token}
-```
-
-**مثال**: `DELETE /api/admin/live-streams/1`
-
----
-
-## 🔔 اختبار الإشعارات (Notifications)
-
-### إنشاء وإرسال إشعار
-
-**Method**: `POST`  
-**URL**: `http://your-domain.com/api/admin/notifications`  
-**Headers**:
-
-```
-Authorization: Bearer {your_token}
-Content-Type: application/json
-```
-
-**Body** (raw JSON):
-
-```json
-{
-    "title": "إشعار مهم",
-    "body": "هذا إشعار مهم لجميع المستخدمين",
-    "type": "manual",
-    "priority": 1,
-    "action_url": "https://example.com",
-    "action_text": "عرض التفاصيل",
-    "target_type": "all"
-}
-```
-
-**أو لإرسال لمستخدمين محددين**:
-
-```json
-{
-    "title": "إشعار خاص",
-    "body": "هذا إشعار لمستخدمين محددين",
-    "type": "manual",
-    "priority": 2,
-    "target_type": "specific",
-    "user_ids": [1, 2, 3]
-}
-```
-
----
-
-## 📝 خطوات استخدام Postman
-
-### 1. إعداد Environment (اختياري)
-
-أنشئ Environment جديد في Postman:
-
--   `base_url`: `http://your-domain.com/api`
--   `token`: `{your_token}`
-
-### 2. إعداد Authorization
-
-في كل request:
-
-1. اذهب إلى تبويب **Authorization**
-2. اختر **Type**: `Bearer Token`
-3. أدخل الـ token في حقل **Token**
-
-### 3. إرسال الملفات (للصور)
-
-1. اختر **Body** tab
-2. اختر **form-data**
-3. أضف الحقول:
-    - للحقول النصية: اختر **Text**
-    - للملفات: اختر **File** ثم اختر الملف
-
-### 4. مثال على تحديث سلايد مع صورة
-
-```
-Method: PUT
-URL: {{base_url}}/admin/slides/1
-Authorization: Bearer {{token}}
-Body (form-data):
-  - title: "عنوان جديد" (Text)
-  - image: [اختر ملف] (File)
-  - is_active: "true" (Text)
-```
-
----
-
-## ✅ نصائح مهمة
-
-1. **للصور**: استخدم `multipart/form-data` وليس `application/json`
-2. **للـ Token**: استخدم `Bearer Token` في Authorization
-3. **للحقول الاختيارية**: يمكنك تركها فارغة أو عدم إضافتها
-4. **للحقول المطلوبة**: يجب إضافتها دائماً
-5. **للأخطاء**: تحقق من Status Code و Response Body
-
----
-
-## 🔍 أمثلة على الاستجابات
-
-### نجاح (200/201):
+### الاستجابة المتوقعة
 
 ```json
 {
     "success": true,
-    "message": "تم التحديث بنجاح",
-    "data": {...}
-}
-```
-
-### خطأ (422):
-
-```json
-{
-    "success": false,
-    "message": "The given data was invalid.",
-    "errors": {
-        "title": ["حقل العنوان مطلوب"]
+    "data": {
+        "user": {
+            "id": 1,
+            "username": "admin",
+            "role": 2
+        },
+        "token": "1|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     }
 }
 ```
 
-### خطأ (403):
+**احفظ الـ Token** لاستخدامه في الطلبات التالية.
+
+---
+
+## 🔄 الخطوة 2: اختبار تجديد الاشتراك مباشرة من Radius API
+
+### إعدادات الطلب
+
+-   **Method:** `POST`
+-   **URL:** `http://38.156.75.137:3031/radiusmanager/USERS/dash/renew_subscription.php`
+
+### Headers
+
+```
+Authorization: Bearer APP2025M
+Accept: application/json
+Content-Type: application/json
+```
+
+### Body (raw JSON)
 
 ```json
 {
-    "success": false,
-    "message": "This action is unauthorized."
+    "username": "testt",
+    "plan_id": 2,
+    "months": 0.5,
+    "paid_status": "paid"
 }
 ```
+
+### الاستجابة المتوقعة (نجاح)
+
+```json
+{
+    "status": "success",
+    "username": "testt",
+    "service": "2M-PPP",
+    "price": "8.000000",
+    "months": 0.5,
+    "days_added": 15,
+    "old_expiration": "2026-06-06 00:00:00",
+    "new_expiration": "2026-06-21 00:00:00",
+    "paid_status": "paid"
+}
+```
+
+### الاستجابة المتوقعة (فشل)
+
+```json
+{
+    "status": "error",
+    "message": "Unauthorized Access"
+}
+```
+
+**ملاحظة:** إذا حصلت على `"Unauthorized Access"`، تحقق من:
+-   صحة `Authorization` header
+-   صحة قيمة `Bearer APP2025M`
+
+---
+
+## 📋 الخطوة 3: الحصول على قائمة الخدمات (للعثور على plan_id)
+
+### إعدادات الطلب
+
+-   **Method:** `GET`
+-   **URL:** `http://38.156.75.137:3031/radiusmanager/USERS/dash/get_services.php`
+
+### Headers
+
+```
+Authorization: Bearer APP2025M
+Accept: application/json
+```
+
+### الاستجابة المتوقعة
+
+```json
+{
+    "status": "success",
+    "count": 12,
+    "services": [
+        {
+            "service_id": 1,
+            "service_name": "10M-PPP",
+            "price": "30.00",
+            "currency": "SYP",
+            "speed": {
+                "download_kbps": 10485760,
+                "upload_kbps": 104857600,
+                "download_mbps": 10485.8,
+                "upload_mbps": 104857.6
+            },
+            "unlimited": true
+        },
+        {
+            "service_id": 2,
+            "service_name": "2M-PPP",
+            "price": "8.00",
+            "currency": "USD",
+            "speed": {
+                "download_kbps": 2097152,
+                "upload_kbps": 20971520,
+                "download_mbps": 2097.2,
+                "upload_mbps": 20971.5
+            },
+            "unlimited": false
+        }
+    ]
+}
+```
+
+**استخدم `service_id` كـ `plan_id` في طلب التجديد.**
+
+---
+
+## 💰 الخطوة 4: اختبار قبول طلب دفع من Backend
+
+### إعدادات الطلب
+
+-   **Method:** `PUT`
+-   **URL:** `http://your-backend-url/api/admin/payment-requests/{payment_request_id}/status`
+
+**استبدل `{payment_request_id}` بـ ID الطلب الفعلي.**
+
+### Headers
+
+```
+Authorization: Bearer {your_token}
+Accept: application/json
+Content-Type: application/json
+```
+
+**استبدل `{your_token}` بالـ Token الذي حصلت عليه من تسجيل الدخول.**
+
+### Body (raw JSON)
+
+```json
+{
+    "status": 1,
+    "period_months": 0.5,
+    "plan_name": "2M-PPP",
+    "approved_amount": 4,
+    "notes": "تم الموافقة على الطلب"
+}
+```
+
+**الحقول:**
+
+-   `status`: `1` (موافق) أو `2` (مرفوض)
+-   `period_months`: عدد الأشهر (يدعم القيم العشرية مثل 0.5)
+-   `plan_name`: اسم الخطة (سيتم البحث عن `plan_id` تلقائياً)
+-   `approved_amount`: المبلغ المعتمد
+-   `notes`: ملاحظات (اختياري)
+
+### الاستجابة المتوقعة
+
+```json
+{
+    "success": true,
+    "message": "تم قبول الطلب بنجاح",
+    "data": {
+        "id": 1,
+        "status": 1,
+        "status_label": "مقبول",
+        "plan_name": "2M-PPP",
+        "period_months": 0.5,
+        "approved_amount": 4,
+        "is_paid": true
+    }
+}
+```
+
+**ما يحدث تلقائياً:**
+
+1. ✅ البحث عن `plan_id` من `plan_name`
+2. ✅ إرسال طلب التجديد إلى Radius API
+3. ✅ مزامنة بيانات الاشتراك من Radius
+4. ✅ إضافة الإيرادات (revenue)
+
+---
+
+## 💵 الخطوة 5: اختبار إضافة دفع نقدي
+
+### إعدادات الطلب
+
+-   **Method:** `POST`
+-   **URL:** `http://your-backend-url/api/admin/payment-requests/cash-payment`
+
+### Headers
+
+```
+Authorization: Bearer {your_token}
+Accept: application/json
+Content-Type: application/json
+```
+
+### Body (raw JSON) - دفع نقدي عادي
+
+```json
+{
+    "user_id": 1,
+    "amount": 4,
+    "currency": "USD",
+    "period_months": 0.5,
+    "plan_name": "2M-PPP",
+    "is_deferred": false,
+    "payment_date": "2026-01-15",
+    "notes": "دفعة نقدية"
+}
+```
+
+### Body (raw JSON) - دفع مؤجل
+
+```json
+{
+    "user_id": 1,
+    "amount": 4,
+    "currency": "USD",
+    "period_months": 0.5,
+    "plan_name": "2M-PPP",
+    "is_deferred": true,
+    "payment_date": "2026-01-15",
+    "notes": "دفعة مؤجلة"
+}
+```
+
+### الاستجابة المتوقعة
+
+```json
+{
+    "success": true,
+    "message": "تم إضافة الدفعة النقدية بنجاح",
+    "data": {
+        "id": 2,
+        "payment_type": "cash",
+        "amount": 4,
+        "currency": "USD",
+        "period_months": 0.5,
+        "plan_name": "2M-PPP",
+        "status": 1,
+        "is_paid": true,
+        "is_deferred": false
+    }
+}
+```
+
+**ما يحدث تلقائياً:**
+
+1. ✅ إنشاء طلب دفع نقدي
+2. ✅ الموافقة عليه تلقائياً
+3. ✅ البحث عن `plan_id` من `plan_name`
+4. ✅ إرسال طلب التجديد إلى Radius API
+5. ✅ مزامنة بيانات الاشتراك من Radius
+6. ✅ إضافة الإيرادات (إذا لم يكن مؤجل)
+
+---
+
+## 📝 أمثلة إضافية
+
+### مثال 1: تجديد لمدة 3 أشهر
+
+```json
+{
+    "username": "testt",
+    "plan_id": 2,
+    "months": 3,
+    "paid_status": "paid"
+}
+```
+
+### مثال 2: تجديد لمدة 1.5 شهر (45 يوم)
+
+```json
+{
+    "username": "testt",
+    "plan_id": 2,
+    "months": 1.5,
+    "paid_status": "paid"
+}
+```
+
+### مثال 3: تجديد بدون تحديد plan_id
+
+```json
+{
+    "username": "testt",
+    "months": 1,
+    "paid_status": "paid"
+}
+```
+
+**ملاحظة:** قد يفشل إذا كان `plan_id` مطلوباً في Radius API.
+
+---
+
+## ⚠️ استكشاف الأخطاء
+
+### خطأ: "Unauthorized Access"
+
+**السبب:** مفتاح API غير صحيح أو مفقود.
+
+**الحل:**
+
+1. تحقق من `Authorization` header
+2. تأكد من استخدام `Bearer APP2025M`
+3. تحقق من أن المفتاح صحيح في ملف `.env`
+
+### خطأ: "plan_id not found"
+
+**السبب:** `plan_id` غير موجود في قاعدة بيانات Radius.
+
+**الحل:**
+
+1. احصل على قائمة الخدمات من `/get_services.php`
+2. استخدم `service_id` الصحيح كـ `plan_id`
+
+### خطأ: "User not found"
+
+**السبب:** اسم المستخدم غير موجود في Radius.
+
+**الحل:**
+
+1. تحقق من اسم المستخدم
+2. تأكد من أن المستخدم موجود في Radius
+
+### خطأ: HTTP 401/403
+
+**السبب:** مشكلة في المصادقة.
+
+**الحل:**
+
+1. تحقق من `Authorization` header
+2. تأكد من صحة مفتاح API
+3. تحقق من أن الـ Token صالح (للطلبات من Backend)
+
+---
+
+## 📚 روابط مفيدة
+
+-   [دليل تجديد الاشتراك الكامل](./RADIUS_RENEW_API_GUIDE.md)
+-   [دليل API العام](./README_API.md)
