@@ -42,7 +42,26 @@ class DeviceTokenController extends Controller
                 ], 422);
             }
 
-            // Create or update device token
+            // Delete token from any other user (to prevent duplicate tokens across users)
+            // This ensures that a device token can only belong to one user at a time
+            $deletedTokens = DeviceToken::where('device_token', $validated['device_token'])
+                ->where('user_id', '!=', $user->id)
+                ->delete();
+
+            if ($deletedTokens > 0) {
+                Log::info('Removed device token from other users', [
+                    'device_token' => substr($validated['device_token'], 0, 20) . '...',
+                    'deleted_count' => $deletedTokens,
+                    'new_user_id' => $user->id,
+                ]);
+            }
+
+            // Also deactivate any existing tokens for this user with the same token (if any)
+            DeviceToken::where('user_id', $user->id)
+                ->where('device_token', $validated['device_token'])
+                ->update(['is_active' => false]);
+
+            // Create or update device token for current user
             $deviceToken = DeviceToken::updateOrCreate(
                 [
                     'user_id' => $user->id,

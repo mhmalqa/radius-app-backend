@@ -138,6 +138,27 @@ class AuthService
             'sync_status' => 0, // Success
         ]);
 
+        // Send notification to admins about new user registration
+        try {
+            $notificationService = app(\App\Services\NotificationService::class);
+            $userName = $user->firstname ?? $user->username;
+            
+            $notificationService->sendToAdmins([
+                'title' => 'تم إنشاء حساب جديد',
+                'body' => "تم إنشاء حساب جديد للمستخدم: {$userName} ({$user->username})",
+                'type' => 'system',
+                'priority' => 1, // Important
+                'action_url' => '/admin/users/' . $user->id,
+                'action_text' => 'عرض المستخدم',
+            ]);
+        } catch (\Exception $e) {
+            // Log error but don't fail registration
+            Log::error('Failed to send notification to admins about new user', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return $user;
     }
 

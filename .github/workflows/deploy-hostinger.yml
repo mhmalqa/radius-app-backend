@@ -1,0 +1,58 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: # للتنفيذ اليدوي
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Hostinger via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT || 22 }}
+          script: |
+            echo "🚀 Starting deployment..."
+            
+            # الانتقال إلى مجلد المشروع
+            cd ~/public_html/app.weventex.com || cd ~/domains/app.weventex.com/public_html
+            
+            # Pull latest changes
+            echo "📥 Pulling latest changes..."
+            git pull origin main
+            
+            # Install dependencies
+            echo "📦 Installing dependencies..."
+            composer install --no-dev --optimize-autoloader
+            
+            # Run migrations
+            echo "🗄️ Running migrations..."
+            php artisan migrate --force
+            
+            # Cache configuration
+            echo "⚙️ Caching configuration..."
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            
+            # Clear old caches
+            php artisan cache:clear
+            
+            # Set permissions
+            chmod -R 755 storage bootstrap/cache
+            
+            echo "✅ Deployment completed successfully!"
+            
+      - name: Deployment Status
+        run: |
+          echo "✅ Deployment to Hostinger completed!"
+          echo "🌐 Your app is live at: https://app.weventex.com"

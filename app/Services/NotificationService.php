@@ -275,19 +275,49 @@ class NotificationService
     }
 
     /**
-     * Get user notifications.
+     * Get user notifications with filtering.
+     * 
+     * @param AppUser $user
+     * @param string $status 'all', 'read', 'unread' (default: 'all')
+     * @param string|null $type 'system', 'manual', or null for all types (default: null)
+     * @param int $perPage Items per page (default: 15)
+     * @param string|null $search Search in title and body (default: null)
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
      */
-    public function getUserNotifications(AppUser $user, ?bool $unreadOnly = false): \Illuminate\Contracts\Pagination\LengthAwarePaginator
-    {
+    public function getUserNotifications(
+        AppUser $user, 
+        string $status = 'all', 
+        ?string $type = null, 
+        int $perPage = 15,
+        ?string $search = null
+    ): \Illuminate\Contracts\Pagination\LengthAwarePaginator {
         $query = $user->notifications()
             ->with('creator')
             ->orderBy('notifications.created_at', 'desc');
 
-        if ($unreadOnly) {
+        // Filter by read status
+        if ($status === 'read') {
+            $query->wherePivot('is_read', true);
+        } elseif ($status === 'unread') {
             $query->wherePivot('is_read', false);
         }
+        // If status is 'all', no filter is applied
 
-        return $query->paginate(15);
+        // Filter by type
+        if ($type && in_array($type, ['system', 'manual'])) {
+            $query->where('notifications.type', $type);
+        }
+
+        // Search in title and body
+        if ($search && trim($search) !== '') {
+            $searchTerm = '%' . trim($search) . '%';
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('notifications.title', 'LIKE', $searchTerm)
+                  ->orWhere('notifications.body', 'LIKE', $searchTerm);
+            });
+        }
+
+        return $query->paginate($perPage);
     }
 
     /**
@@ -298,6 +328,40 @@ class NotificationService
         return $user->notifications()
             ->wherePivot('is_read', false)
             ->count();
+    }
+
+    /**
+     * Get read notifications count.
+     */
+    public function getReadCount(AppUser $user): int
+    {
+        return $user->notifications()
+            ->wherePivot('is_read', true)
+            ->count();
+    }
+
+    /**
+     * Get unread notifications with pagination.
+     */
+    public function getUnreadNotifications(AppUser $user, int $perPage = 15): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    {
+        return $user->notifications()
+            ->with('creator')
+            ->wherePivot('is_read', false)
+            ->orderBy('notifications.created_at', 'desc')
+            ->paginate($perPage);
+    }
+
+    /**
+     * Get read notifications with pagination.
+     */
+    public function getReadNotifications(AppUser $user, int $perPage = 15): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    {
+        return $user->notifications()
+            ->with('creator')
+            ->wherePivot('is_read', true)
+            ->orderBy('notifications.created_at', 'desc')
+            ->paginate($perPage);
     }
 
     /**

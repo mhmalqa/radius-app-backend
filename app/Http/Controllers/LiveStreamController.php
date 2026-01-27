@@ -7,6 +7,7 @@ use App\Http\Resources\LiveStreamResource;
 use App\Models\AppUser;
 use App\Models\LiveStream;
 use App\Services\NotificationService;
+use App\Services\LiveStreamPlaybackService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -14,7 +15,8 @@ use Illuminate\Support\Facades\Storage;
 class LiveStreamController extends Controller
 {
     public function __construct(
-        protected NotificationService $notificationService
+        protected NotificationService $notificationService,
+        protected LiveStreamPlaybackService $playbackService
     ) {}
     /**
      * Get all active live streams.
@@ -58,29 +60,37 @@ class LiveStreamController extends Controller
                 $hasActiveSubscription = $user->subscription && $user->subscription->isActive();
 
 
-                // Check live_access - ensure it's properly cast to boolean
-                // live_access = 1 (true) means user has live broadcast access
-                $hasLiveAccess =$user->live_access === true;
+                // live_access = manual override (admin toggle). Package subscriptions are automatic.
+                $hasManualLiveAccess = $user->live_access === true;
+                $hasAnyLivePackageSubscription = $user->hasActiveLiveStreamSubscription();
+                $activePackageIds = $user->getActiveLiveStreamPackageIds();
 
                 // Only show active streams for non-admin users
                 $query->where('is_active', true);
 
-                // Filter by access type based on user permissions
                 if ($hasActiveSubscription) {
-                    // User has active subscription - show streams based on live_access
-                    if ($hasLiveAccess) {
-                        // User has live_access (live_access = 1): show both all_subscribers AND live_subscribers_only
+                    // If user has manual live access, allow all active streams (package & non-package)
+                    // (base subscription is still required)
+                    if (!$hasManualLiveAccess) {
+                        $query->where(function ($q) use ($hasAnyLivePackageSubscription, $activePackageIds) {
+                            // Streams not tied to a package
+                            $q->where(function ($q2) use ($hasAnyLivePackageSubscription) {
+                                $q2->whereNull('live_stream_package_id')
+                                    ->where(function ($q3) use ($hasAnyLivePackageSubscription) {
+                                        $q3->where('access_type', 'all_subscribers')
+                                            ->orWhereNull('access_type');
 
-                        $query->where(function ($q) {
-                            $q->where('access_type', 'all_subscribers')
-                                ->orWhereNull('access_type')
-                                ->orWhere('access_type', 'live_subscribers_only');
-                        });
-                    } else {
-                        // User doesn't have live_access (live_access = 0): show only all_subscribers
-                        $query->where(function ($q) {
-                            $q->where('access_type', 'all_subscribers')
-                                ->orWhereNull('access_type');
+                                        // Global live_subscribers_only streams (no package) require any live package subscription
+                                        if ($hasAnyLivePackageSubscription) {
+                                            $q3->orWhere('access_type', 'live_subscribers_only');
+                                        }
+                                    });
+                            });
+
+                            // Streams tied to a specific package: require active subscription to that package
+                            if (!empty($activePackageIds)) {
+                                $q->orWhereIn('live_stream_package_id', $activePackageIds);
+                            }
                         });
                     }
                 } else {
@@ -105,6 +115,7 @@ class LiveStreamController extends Controller
                     $q->where('access_type', 'all_subscribers')
                         ->orWhereNull('access_type');
                 })
+                ->whereNull('live_stream_package_id')
                 ->where('is_active', true);
             }
         }
@@ -123,9 +134,19 @@ class LiveStreamController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(15);
 
+        $items = $streams->items();
+
+        // Attach protected playback URLs for authenticated non-admin users
+        if ($user && !$isAdmin) {
+            foreach ($items as $stream) {
+                $issued = $this->playbackService->issueToken($user, $stream, $request);
+                $stream->secure_stream_url = url("/api/live-streams/{$stream->id}/secure") . '?token=' . $issued['token'];
+            }
+        }
+
         return response()->json([
             'success' => true,
-            'data' => LiveStreamResource::collection($streams->items()),
+            'data' => LiveStreamResource::collection($items),
             'meta' => [
                 'current_page' => $streams->currentPage(),
                 'last_page' => $streams->lastPage(),
@@ -165,7 +186,8 @@ class LiveStreamController extends Controller
             }
 
             $hasActiveSubscription = $user->subscription && $user->subscription->isActive();
-            if (!$user->live_access || !$hasActiveSubscription) {
+            $hasLiveAccess = ($user->live_access === true) || $user->hasActiveLiveStreamSubscription();
+            if (!$hasLiveAccess || !$hasActiveSubscription) {
                 return response()->json([
                     'success' => false,
                     'message' => 'ليس لديك صلاحية لمشاهدة هذا البث. هذا البث متاح فقط لمشتركي البث المباشر',
@@ -189,8 +211,27 @@ class LiveStreamController extends Controller
             }
         }
 
+        // Package-level restriction (applies to any access_type if live_stream_package_id is set)
+        if ($user && !$user->isAdmin() && $liveStream->live_stream_package_id) {
+            $hasManualLiveAccess = $user->live_access === true;
+            $hasPackage = $user->hasActiveLiveStreamSubscription((int) $liveStream->live_stream_package_id);
+
+            if (!$hasManualLiveAccess && !$hasPackage) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'هذا البث متاح فقط لمشتركي الباقة الخاصة به',
+                ], 403);
+            }
+        }
+
         // Increment view count
         $liveStream->incrementViews();
+
+        // Attach protected playback URL for non-admin users
+        if ($user && !$user->isAdmin()) {
+            $issued = $this->playbackService->issueToken($user, $liveStream, $request);
+            $liveStream->secure_stream_url = url("/api/live-streams/{$liveStream->id}/secure") . '?token=' . $issued['token'];
+        }
 
         return response()->json([
             'success' => true,
@@ -296,7 +337,7 @@ class LiveStreamController extends Controller
         $allowedFields = [
             'title', 'description', 'stream_url', 'access_type', 'category',
             'stream_type', 'is_active', 'is_featured', 'start_time', 'end_time',
-            'max_viewers', 'sort_order', 'quality_options'
+            'max_viewers', 'sort_order', 'quality_options', 'live_stream_package_id'
         ];
 
         // Get data from request (works with both JSON and form-data)
@@ -374,23 +415,44 @@ class LiveStreamController extends Controller
         $userIds = [];
         $accessType = $liveStream->access_type ?? 'all_subscribers'; // Default to all_subscribers for old records
 
-        if ($accessType === 'live_subscribers_only') {
-            // Get users with live_access AND active subscription
-            $userIds = AppUser::where('is_active', true)
-                ->where('live_access', true)
-                ->whereHas('subscription', function ($query) {
-                    $query->where('expiration_at', '>', now());
+        $packageId = $liveStream->live_stream_package_id ? (int) $liveStream->live_stream_package_id : null;
+
+        // Base filter: users with active base subscription (internet)
+        $baseQuery = AppUser::where('is_active', true)
+            ->whereHas('subscription', function ($query) {
+                $query->where('expiration_at', '>', now());
+            });
+
+        if ($packageId !== null) {
+            // Stream tied to a specific package:
+            // notify users with manual live_access OR active subscription for that package.
+            $userIds = $baseQuery
+                ->where(function ($q) use ($packageId) {
+                    $q->where('live_access', true)
+                        ->orWhereHas('liveStreamSubscriptions', function ($sq) use ($packageId) {
+                            $sq->where('status', 'active')
+                                ->where('expires_at', '>', now())
+                                ->where('package_id', $packageId);
+                        });
+                })
+                ->pluck('id')
+                ->toArray();
+        } elseif ($accessType === 'live_subscribers_only') {
+            // Global live_subscribers_only stream (no package):
+            // notify users with manual live_access OR any active live package subscription.
+            $userIds = $baseQuery
+                ->where(function ($q) {
+                    $q->where('live_access', true)
+                        ->orWhereHas('liveStreamSubscriptions', function ($sq) {
+                            $sq->where('status', 'active')
+                                ->where('expires_at', '>', now());
+                        });
                 })
                 ->pluck('id')
                 ->toArray();
         } else {
-            // Get all users with active subscription
-            $userIds = AppUser::where('is_active', true)
-                ->whereHas('subscription', function ($query) {
-                    $query->where('expiration_at', '>', now());
-                })
-                ->pluck('id')
-                ->toArray();
+            // all_subscribers stream (no package): notify all active base subscribers
+            $userIds = $baseQuery->pluck('id')->toArray();
         }
 
         if (empty($userIds)) {

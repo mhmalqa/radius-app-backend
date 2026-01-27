@@ -22,11 +22,21 @@ class CreateCashPaymentRequest extends FormRequest
      */
     public function rules(): array
     {
+        $purpose = $this->input('purpose', 'internet_subscription');
+        $isLive = $purpose === 'live_stream_subscription';
+
+        $periodMonthsRules = ['nullable', 'integer', 'min:1', 'max:12'];
+        if (!$isLive) {
+            $periodMonthsRules[] = 'required';
+        }
+
         return [
             'user_id' => ['required', 'integer', 'exists:app_users,id'],
+            'purpose' => ['nullable', 'string', Rule::in(['internet_subscription', 'live_stream_subscription'])],
+            'package_id' => ['required_if:purpose,live_stream_subscription', 'integer', 'exists:live_stream_packages,id'],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'currency' => ['nullable', 'string', 'max:3', Rule::in(['USD', 'SYP', 'TRY'])],
-            'period_months' => ['required', 'integer', 'min:1', 'max:12'],
+            'period_months' => $periodMonthsRules,
             'plan_name' => ['nullable', 'string', 'max:100'],
             'is_deferred' => ['nullable', 'boolean'],
             'payment_date' => ['nullable', 'date'],
@@ -44,6 +54,8 @@ class CreateCashPaymentRequest extends FormRequest
         return [
             'user_id.required' => 'المستخدم مطلوب',
             'user_id.exists' => 'المستخدم غير موجود',
+            'package_id.required_if' => 'الباقة مطلوبة لاشتراك البث المباشر',
+            'package_id.exists' => 'الباقة غير موجودة',
             'amount.required' => 'المبلغ مطلوب',
             'amount.numeric' => 'المبلغ يجب أن يكون رقماً',
             'amount.min' => 'المبلغ يجب أن يكون أكبر من صفر',

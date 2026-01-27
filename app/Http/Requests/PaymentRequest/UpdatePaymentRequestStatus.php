@@ -22,12 +22,21 @@ class UpdatePaymentRequestStatus extends FormRequest
      */
     public function rules(): array
     {
+        $paymentRequest = $this->route('paymentRequest');
+        $purpose = $paymentRequest?->purpose ?? 'internet_subscription';
+        $requiresPeriodMonths = $purpose !== 'live_stream_subscription';
+
+        $periodMonthsRules = ['nullable', 'integer', 'min:1', 'max:12'];
+        if ($requiresPeriodMonths) {
+            $periodMonthsRules[] = 'required_if:status,1';
+        }
+
         return [
             'status' => ['required', 'integer', Rule::in([1, 2])], // 1: approved, 2: rejected
             'reject_reason' => ['required_if:status,2', 'string', 'max:500'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'approved_amount' => ['nullable', 'numeric', 'min:0.01'],
-            'period_months' => ['nullable', 'integer', 'min:1', 'max:12', 'required_if:status,1'],
+            'period_months' => $periodMonthsRules,
             'plan_name' => ['nullable', 'string', 'max:100'],
         ];
     }

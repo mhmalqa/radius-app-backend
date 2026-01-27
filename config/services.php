@@ -43,4 +43,8 @@ return [
         'server_key' => env('FIREBASE_SERVER_KEY'),
     ],
 
+    'live_stream' => [
+        'token_ttl_seconds' => env('LIVE_STREAM_TOKEN_TTL_SECONDS', 300),
+    ],
+
 ];

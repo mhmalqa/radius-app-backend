@@ -52,6 +52,7 @@ Authorization: Bearer {token}
 | `description`     | string   | null              | وصف البث المباشر                                                                                          |
 | `thumbnail`       | file     | null              | الصورة المصغرة (jpg, jpeg, png, webp - الحد الأقصى: 2MB)                                                  |
 | `access_type`     | string   | 'all_subscribers' | نوع الوصول: `'all_subscribers'` (لجميع المشتركين) أو `'live_subscribers_only'` (لمشتركي البث المباشر فقط) |
+| `live_stream_package_id` | integer | null        | ربط البث بباقة معينة (اختياري). إذا تم تحديده يصبح البث متاحًا فقط لمشتركي هذه الباقة (أو من لديه live_access=true) |
 | `category`        | string   | 'match'           | الفئة: `'match'` (مباراة), `'channel'` (قناة), `'event'` (حدث)                                            |
 | `stream_type`     | string   | 'live'            | نوع البث: `'live'` (مباشر) أو `'vod'` (فيديو عند الطلب)                                                   |
 | `is_active`       | boolean  | true              | تفعيل/تعطيل البث                                                                                          |
@@ -87,6 +88,7 @@ Form Data:
 - stream_url: "https://example.com/stream.m3u8"
 - thumbnail: [file]
 - access_type: "all_subscribers"
+- live_stream_package_id: 1
 - category: "match"
 - stream_type: "live"
 - is_active: true

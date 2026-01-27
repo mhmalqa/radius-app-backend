@@ -7,6 +7,7 @@ use App\Http\Requests\PaymentRequest\CreateCashPaymentRequest;
 use App\Http\Requests\PaymentRequest\UpdatePaymentRequestStatus;
 use App\Http\Resources\PaymentRequestResource;
 use App\Models\AppUser;
+use App\Models\LiveStreamPackage;
 use App\Models\PaymentRequest;
 use App\Enums\PaymentRequestStatus;
 use App\Services\PaymentService;
@@ -28,7 +29,7 @@ class PaymentRequestController extends Controller
     {
         $status = $request->query('status');
         $currency = $request->query('currency');
-        
+
         // Validate currency if provided
         if ($currency !== null && !in_array($currency, ['USD', 'SYP', 'TRY'])) {
             return response()->json([
@@ -115,7 +116,7 @@ class PaymentRequestController extends Controller
         $currency = $request->query('currency');
         $search = $request->query('search');
         $periodMonths = $request->query('period_months');
-        
+
         // Validate currency if provided
         if ($currency !== null && !in_array($currency, ['USD', 'SYP', 'TRY'])) {
             return response()->json([
@@ -217,11 +218,50 @@ class PaymentRequestController extends Controller
         $validated = $request->validated();
         $user = AppUser::findOrFail($validated['user_id']);
 
+        $purpose = $validated['purpose'] ?? 'internet_subscription';
+        if ($purpose === 'live_stream_subscription') {
+            $package = LiveStreamPackage::findOrFail($validated['package_id']);
+
+            // Force correct mapping for live stream subscription cash payment
+            $validated['purpose'] = 'live_stream_subscription';
+            $validated['period_months'] = null; // IMPORTANT: do not renew Radius
+            $validated['plan_name'] = $package->name;
+            $validated['currency'] = $validated['currency'] ?? $package->currency ?? 'USD';
+            $validated['meta'] = [
+                'package_id' => $package->id,
+            ];
+        }
+
         $paymentRequest = $this->paymentService->createCashPayment(
             $user,
             $request->user(),
             $validated
         );
+
+        // إرسال إشعار للمستخدم
+        $isLive = ($paymentRequest->purpose ?? 'internet_subscription') === 'live_stream_subscription';
+
+        $userNotificationTitle = $paymentRequest->is_deferred
+            ? ($isLive ? 'تم تفعيل اشتراك البث (دفع مؤجل)' : 'تم تجديد الاشتراك (دفع مؤجل)')
+            : ($isLive ? 'تم تفعيل اشتراك البث بنجاح' : 'تم تجديد الاشتراك بنجاح');
+
+        $userNotificationBody = $paymentRequest->is_deferred
+            ? ($isLive
+                ? "تم تفعيل اشتراك البث بنجاح وتسجيل دفعة مؤجلة بمبلغ {$paymentRequest->amount} {$paymentRequest->currency}"
+                : "تم تجديد اشتراكك بنجاح وتسجيل دفعة مؤجلة بمبلغ {$paymentRequest->amount} {$paymentRequest->currency}")
+            : ($isLive
+                ? "تم تفعيل اشتراك البث بنجاح واستلام مبلغ {$paymentRequest->amount} {$paymentRequest->currency}"
+                : "تم تجديد اشتراكك بنجاح واستلام مبلغ {$paymentRequest->amount} {$paymentRequest->currency}");
+
+        $this->notificationService->createNotification([
+            'title' => $userNotificationTitle,
+            'body' => $userNotificationBody,
+            'type' => 'system',
+            'priority' => 1,
+            'action_url' => "/payment-requests/{$paymentRequest->id}",
+            'action_text' => 'عرض التفاصيل',
+            'icon' => 'check_circle',
+        ], [$user->id], 'specific');
 
         // إرسال إشعار للمديرين عند إضافة دفعة نقدية
         $this->notificationService->sendToAdmins([
@@ -234,9 +274,11 @@ class PaymentRequestController extends Controller
             'icon' => 'payment',
         ]);
 
-        $message = $paymentRequest->is_deferred 
-            ? 'تم إضافة الدفعة المؤجلة بنجاح. سيتم تجديد الاشتراك ولكن الدفعة غير مدفوعة بعد'
-            : 'تم إضافة الدفعة النقدية بنجاح';
+        $message = $paymentRequest->is_deferred
+            ? ($isLive
+                ? 'تم إضافة دفعة مؤجلة لاشتراك البث. تم التفعيل ولكن الدفعة غير مدفوعة بعد'
+                : 'تم إضافة الدفعة المؤجلة بنجاح. سيتم تجديد الاشتراك ولكن الدفعة غير مدفوعة بعد')
+            : ($isLive ? 'تم إضافة دفعة نقدية لاشتراك البث بنجاح' : 'تم إضافة الدفعة النقدية بنجاح');
 
         return response()->json([
             'success' => true,
@@ -269,10 +311,23 @@ class PaymentRequestController extends Controller
                 );
 
                 $paymentRequest = $paymentRequest->fresh(['user', 'paymentMethod', 'reviewer', 'creator', 'revenue', 'partialPayments.creator']);
-                
+
                 $totalAmount = $paymentRequest->approved_amount ?? $paymentRequest->amount;
                 $paidAmount = $paymentRequest->paid_amount ?? 0;
                 $remainingAmount = $totalAmount - $paidAmount;
+
+                // إرسال إشعار للمستخدم
+                $this->notificationService->createNotification([
+                    'title' => $paymentRequest->isFullyPaid() ? 'تم سداد الدفعة المؤجلة بالكامل' : 'تم استلام دفعة جزئية',
+                    'body' => $paymentRequest->isFullyPaid()
+                        ? "تم سداد الدفعة المؤجلة الخاصة بك بالكامل."
+                        : "تم استلام دفعة جزئية بقيمة {$amount} {$paymentRequest->currency}. المتبقي: {$remainingAmount} {$paymentRequest->currency}",
+                    'type' => 'system',
+                    'priority' => 1,
+                    'action_url' => "/payment-requests/{$paymentRequest->id}",
+                    'action_text' => 'عرض التفاصيل',
+                    'icon' => 'payment',
+                ], [$paymentRequest->user_id], 'specific');
 
                 // إرسال إشعار للمديرين عند إضافة دفعة جزئية
                 $this->notificationService->sendToAdmins([
@@ -287,7 +342,7 @@ class PaymentRequestController extends Controller
                     'icon' => 'payment',
                 ]);
 
-                $message = $paymentRequest->isFullyPaid() 
+                $message = $paymentRequest->isFullyPaid()
                     ? "تم إكمال الدفعة بنجاح. المبلغ الكلي: {$totalAmount}، المدفوع: {$paidAmount}"
                     : "تم إضافة دفعة جزئية بنجاح. المبلغ المدفوع: {$paidAmount}، المتبقي: {$remainingAmount}";
 
@@ -308,6 +363,17 @@ class PaymentRequestController extends Controller
                 $paymentRequest,
                 $request->user()
             );
+
+            // إرسال إشعار للمستخدم
+            $this->notificationService->createNotification([
+                'title' => 'تم سداد الدفعة المؤجلة',
+                'body' => "تم سداد الدفعة المؤجلة الخاصة بك بالكامل.",
+                'type' => 'system',
+                'priority' => 1,
+                'action_url' => "/payment-requests/{$paymentRequest->id}",
+                'action_text' => 'عرض التفاصيل',
+                'icon' => 'check_circle',
+            ], [$paymentRequest->user_id], 'specific');
 
             // إرسال إشعار للمديرين عند إكمال الدفعة
             $this->notificationService->sendToAdmins([
@@ -373,7 +439,7 @@ class PaymentRequestController extends Controller
 
         foreach ($unpaidDeferred as $payment) {
             $currency = $payment->currency ?? 'USD';
-            
+
             // Calculate remaining amount (total - paid)
             $totalAmount = $payment->approved_amount ?? $payment->amount;
             $paidAmount = $payment->paid_amount ?? 0;

@@ -15,11 +15,13 @@ class PaymentRequest extends Model
     protected $fillable = [
         'user_id',
         'payment_type',
+        'purpose',
         'created_by',
         'amount',
         'currency',
         'period_months',
         'plan_name',
+        'meta',
         'payment_method',
         'payment_method_id',
         'transaction_number',
@@ -50,6 +52,7 @@ class PaymentRequest extends Model
             'auto_approved' => 'boolean',
             'is_paid' => 'boolean',
             'is_deferred' => 'boolean',
+            'meta' => 'array',
         ];
     }
 

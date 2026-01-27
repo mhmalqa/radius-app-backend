@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LiveStream extends Model
 {
@@ -14,6 +15,7 @@ class LiveStream extends Model
         'description',
         'stream_url',
         'access_type',
+        'live_stream_package_id',
         'thumbnail',
         'category',
         'stream_type',
@@ -77,6 +79,11 @@ class LiveStream extends Model
     public function incrementViews(): void
     {
         $this->increment('view_count');
+    }
+
+    public function package(): BelongsTo
+    {
+        return $this->belongsTo(LiveStreamPackage::class, 'live_stream_package_id');
     }
 }
 

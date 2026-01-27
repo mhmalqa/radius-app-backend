@@ -5,9 +5,12 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CashWithdrawalController;
 use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\DatabaseController;
+use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceTokenController;
 use App\Http\Controllers\LiveStreamController;
+use App\Http\Controllers\LiveStreamPlaybackController;
+use App\Http\Controllers\LiveStreamPackageController;
 use App\Http\Controllers\MaintenanceRequestController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentMethodController;
@@ -38,6 +41,8 @@ Route::prefix('auth')->group(function () {
 Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
 Route::get('/slides', [SlideController::class, 'index']);
 Route::get('/live-streams', [LiveStreamController::class, 'index']);
+Route::get('/live-streams/{liveStream}/secure', [LiveStreamPlaybackController::class, 'secure']);
+Route::get('/live-stream-packages', [LiveStreamPackageController::class, 'index']);
 Route::get('/app-settings', [AppSettingController::class, 'index']);
 Route::get('/app-settings/key/{key}', [AppSettingController::class, 'getByKey']);
 
@@ -60,7 +65,9 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
         Route::get('/revenues', [RevenueController::class, 'userRevenues']);
         Route::get('/payments', [PaymentRequestController::class, 'index']);
         Route::get('/unpaid-deferred-installments', [PaymentRequestController::class, 'unpaidDeferredInstallments']);
-        
+        Route::get('/live-stream-subscription', [LiveStreamPackageController::class, 'mySubscription']);
+        Route::get('/live-stream-subscriptions', [LiveStreamPackageController::class, 'mySubscriptions']);
+
         // Device tokens
         Route::prefix('device-tokens')->group(function () {
             Route::get('/', [DeviceTokenController::class, 'index']);
@@ -79,7 +86,17 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     // Live streams routes
     Route::prefix('live-streams')->group(function () {
         Route::get('/{liveStream}', [LiveStreamController::class, 'show']);
+        Route::post('/{liveStream}/playback', [LiveStreamPlaybackController::class, 'create']);
     });
+
+    // Live stream packages purchase
+    Route::prefix('live-stream-packages')->group(function () {
+        Route::post('/{package}/purchase', [LiveStreamPackageController::class, 'purchase']);
+    });
+
+    // Currencies routes (Public for authenticated users)
+    Route::get('/currencies', [CurrencyController::class, 'index']);
+    Route::post('/currencies/convert', [CurrencyController::class, 'convert']);
 
     // Slides routes
     Route::prefix('slides')->group(function () {
@@ -89,7 +106,10 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     // Notifications routes
     Route::prefix('notifications')->group(function () {
         Route::get('/', [NotificationController::class, 'index']);
+        Route::get('/unread', [NotificationController::class, 'unread']);
+        Route::get('/read', [NotificationController::class, 'read']);
         Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::get('/read-count', [NotificationController::class, 'readCount']);
         Route::post('/{notification}/mark-as-read', [NotificationController::class, 'markAsRead']);
         Route::post('/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
     });
@@ -137,7 +157,14 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
         Route::prefix('admin/revenues')->group(function () {
             Route::get('/', [RevenueController::class, 'index']);
             Route::get('/summary', [RevenueController::class, 'summary']);
+            Route::get('/financial-report', [RevenueController::class, 'financialReport']);
             Route::get('/deferred-payments', [RevenueController::class, 'deferredPayments']);
+        });
+
+        // Currencies management
+        Route::prefix('admin/currencies')->group(function () {
+            Route::put('/{currency}', [CurrencyController::class, 'update']);
+            Route::get('/{currency}/history', [CurrencyController::class, 'history']);
         });
 
         // Cash withdrawals management (Cash Box)
@@ -161,6 +188,14 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
             Route::put('/{liveStream}', [LiveStreamController::class, 'update']);
             Route::post('/{liveStream}/update', [LiveStreamController::class, 'update']); // POST route for form-data
             Route::delete('/{liveStream}', [LiveStreamController::class, 'destroy']);
+        });
+
+        // Live stream packages management
+        Route::prefix('admin/live-stream-packages')->group(function () {
+            Route::get('/', [LiveStreamPackageController::class, 'adminIndex']);
+            Route::post('/', [LiveStreamPackageController::class, 'store']);
+            Route::put('/{package}', [LiveStreamPackageController::class, 'update']);
+            Route::delete('/{package}', [LiveStreamPackageController::class, 'destroy']);
         });
 
         // Slides management

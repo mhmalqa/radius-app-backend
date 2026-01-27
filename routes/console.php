@@ -18,6 +18,9 @@ Schedule::command('notifications:subscription-expired')->everyFiveMinutes(); // 
 // Live stream day notifications
 Schedule::command('notifications:live-stream-day')->dailyAt('08:00'); // Send at 8 AM for streams starting today
 
+// Live stream packages: mark expired subscriptions for clean admin reporting
+Schedule::command('live-stream:expire-subscriptions')->hourly();
+
 // Database backups - check schedule from app_settings
 Schedule::call(function () {
     $schedule = \Illuminate\Support\Facades\DB::table('app_settings')

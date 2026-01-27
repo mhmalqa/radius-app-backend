@@ -8,8 +8,115 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
+use App\Models\CashWithdrawal;
+use App\Models\PaymentRequest;
+use App\Enums\PaymentRequestStatus;
+
+use App\Models\UserSubscription;
+
 class RevenueController extends Controller
 {
+    /**
+     * Generate comprehensive financial report (Report/Invoice).
+     * Returns:
+     * - Subscriptions count (Renewals)
+     * - Total Income (Revenues)
+     * - Total Withdrawals (Expenses)
+     * - Net Profit
+     * - Expired users who did not renew in this period
+     * All grouped by currency for a specific period.
+     */
+    public function financialReport(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', Revenue::class);
+
+        $request->validate([
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+        ]);
+
+        $startDate = $request->start_date;
+        $endDate = $request->end_date;
+
+        // 5. Get Expired Users (Who expired in this period and didn't renew)
+        // Logic: Expiration date is between start and end date.
+        // This assumes that if they renewed, the expiration date would have been pushed to the future.
+        $expiredUsers = UserSubscription::with('user')
+            ->whereBetween('expiration_at', [$startDate, $endDate])
+            ->get()
+            ->map(function ($sub) {
+                return [
+                    'user_id' => $sub->user_id,
+                    'username' => $sub->radius_username ?? $sub->user->username ?? 'N/A',
+                    'firstname' => $sub->firstname ?? $sub->user->firstname ?? 'N/A',
+                    'phone' => $sub->mobile ?? $sub->user->phone ?? 'N/A',
+                    'plan_name' => $sub->plan_name ?? 'N/A',
+                    'expiration_date' => $sub->expiration_at->format('Y-m-d'),
+                    'days_since_expiry' => (int) abs(now()->diffInDays($sub->expiration_at, false)), // Negative means past
+                ];
+            });
+
+        $currencies = ['USD', 'SYP', 'TRY'];
+        $report = [];
+
+        foreach ($currencies as $currency) {
+            // 1. Calculate Total Revenue (Income)
+            $revenueQuery = Revenue::where('currency', $currency)
+                ->whereBetween('payment_date', [$startDate, $endDate]);
+
+            $totalRevenue = $revenueQuery->sum('amount');
+            $revenueCount = $revenueQuery->count();
+
+            // 2. Calculate Total Withdrawals (Expenses)
+            $withdrawalQuery = CashWithdrawal::where('currency', $currency)
+                ->whereBetween('withdrawal_date', [$startDate, $endDate]);
+
+            $totalWithdrawals = $withdrawalQuery->sum('amount');
+            $withdrawalCount = $withdrawalQuery->count();
+
+            // 3. Count Renewals/Subscriptions (Approved Payment Requests)
+            $subscriptionsQuery = PaymentRequest::where('currency', $currency)
+                ->where('status', PaymentRequestStatus::APPROVED->value)
+                ->whereBetween('updated_at', [$startDate, $endDate]);
+
+            $renewalsCount = $subscriptionsQuery->count();
+
+            // 4. Calculate Net Profit
+            $netProfit = $totalRevenue - $totalWithdrawals;
+
+            // Only add currency to report if there is any activity
+            if ($totalRevenue > 0 || $totalWithdrawals > 0 || $renewalsCount > 0) {
+                $report[] = [
+                    'currency' => $currency,
+                    'summary' => [
+                        'income' => (float) $totalRevenue,
+                        'expenses' => (float) $totalWithdrawals,
+                        'net_profit' => (float) $netProfit,
+                    ],
+                    'activity' => [
+                        'renewals_count' => (int) $renewalsCount,
+                        'transactions_count' => (int) $revenueCount,
+                        'withdrawals_count' => (int) $withdrawalCount,
+                    ]
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'period' => [
+                    'start_date' => $startDate,
+                    'end_date' => $endDate,
+                ],
+                'generated_at' => now()->toIso8601String(),
+                'report' => $report,
+                'expired_users' => $expiredUsers, // List of users who expired and didn't renew
+                'note' => 'التقرير المالي الشامل (فاتورة)',
+            ]
+        ]);
+    }
+
     /**
      * Get all revenues with filtering (admin/accountant only).
      */
@@ -98,7 +205,7 @@ class RevenueController extends Controller
 
         // Build base query with filters
         $baseQuery = Revenue::query();
-        
+
         if ($request->has('from_date')) {
             $baseQuery->where('payment_date', '>=', $request->from_date);
         }
@@ -164,7 +271,7 @@ class RevenueController extends Controller
         // Top users by revenue - لكل عملة بشكل منفصل
         $topUsersByCurrency = [];
         $currencies = ['USD', 'SYP', 'TRY'];
-        
+
         foreach ($currencies as $currency) {
             $topUsers = Revenue::query()
                 ->where('currency', $currency)
@@ -193,7 +300,7 @@ class RevenueController extends Controller
                         'count' => (int) $item->count,
                     ];
                 });
-            
+
             $topUsersByCurrency[$currency] = $topUsers;
         }
 
@@ -310,7 +417,7 @@ class RevenueController extends Controller
         // Calculate total deferred amount
         $totalDeferredQuery = \App\Models\PaymentRequest::where('is_deferred', true)
             ->where('is_paid', false);
-        
+
         if ($request->has('user_id')) {
             $totalDeferredQuery->where('user_id', $request->user_id);
         }

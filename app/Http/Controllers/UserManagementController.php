@@ -79,7 +79,12 @@ class UserManagementController extends Controller
     {
         $this->authorize('view', $user);
 
-        $user->load(['subscription', 'paymentRequests', 'deviceTokens']);
+        $user->load([
+            'subscription',
+            'paymentRequests',
+            'deviceTokens',
+            'liveStreamSubscriptions.package',
+        ]);
 
         return response()->json([
             'success' => true,

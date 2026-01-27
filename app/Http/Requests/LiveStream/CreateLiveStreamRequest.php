@@ -29,6 +29,8 @@ class CreateLiveStreamRequest extends FormRequest
             'description' => ['nullable', 'string'],
             'stream_url' => [$isUpdate ? 'nullable' : 'required', 'url', 'max:500'],
             'access_type' => ['nullable', 'string', Rule::in(['all_subscribers', 'live_subscribers_only'])],
+            // Optional: restrict this stream to a specific live stream package
+            'live_stream_package_id' => ['nullable', 'integer', 'exists:live_stream_packages,id'],
             // استبدال رابط الصورة بملف صورة حقيقي يُرفع من لوحة التحكم
             'thumbnail' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'category' => ['nullable', 'string', 'max:50', Rule::in(['match', 'channel', 'event'])],

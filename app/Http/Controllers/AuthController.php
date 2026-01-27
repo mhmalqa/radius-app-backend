@@ -99,7 +99,17 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+        
+        // 1. Delete FCM token for this device if provided
+        if ($request->has('device_token')) {
+            \App\Models\DeviceToken::where('user_id', $user->id)
+                ->where('device_token', $request->device_token)
+                ->delete();
+        }
+
+        // 2. Delete current access token
+        $user->currentAccessToken()->delete();
 
         return response()->json([
             'success' => true,

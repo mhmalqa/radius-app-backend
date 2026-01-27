@@ -110,6 +110,45 @@ class AppUser extends Authenticatable
     }
 
     /**
+     * Live stream subscriptions (packages).
+     */
+    public function liveStreamSubscriptions(): HasMany
+    {
+        return $this->hasMany(LiveStreamSubscription::class, 'user_id');
+    }
+
+    public function hasActiveLiveStreamSubscription(?int $packageId = null): bool
+    {
+        $query = $this->liveStreamSubscriptions()
+            ->where('status', 'active')
+            ->where('expires_at', '>', now());
+
+        if ($packageId !== null) {
+            $query->where('package_id', $packageId);
+        }
+
+        return $query->exists();
+    }
+
+    /**
+     * Get active live stream package ids for this user.
+     *
+     * @return int[]
+     */
+    public function getActiveLiveStreamPackageIds(): array
+    {
+        return $this->liveStreamSubscriptions()
+            ->where('status', 'active')
+            ->where('expires_at', '>', now())
+            ->whereNotNull('package_id')
+            ->pluck('package_id')
+            ->unique()
+            ->values()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
      * Get all login logs for the user.
      */
     public function loginLogs(): HasMany

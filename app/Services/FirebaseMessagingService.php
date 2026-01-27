@@ -9,6 +9,9 @@ use Kreait\Firebase\Messaging\AndroidConfig;
 use Kreait\Firebase\Messaging\ApnsConfig;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use App\Models\DeviceToken;
+use Kreait\Firebase\Exception\Messaging\NotFound;
+use Kreait\Firebase\Exception\Messaging\InvalidMessage;
 
 class FirebaseMessagingService
 {
@@ -116,6 +119,21 @@ class FirebaseMessagingService
             ]);
 
             return true;
+        } catch (NotFound $e) {
+            Log::warning('FCM token not found, deleting from database', [
+                'token' => substr($token, 0, 20) . '...',
+            ]);
+            $this->deleteInvalidToken($token);
+            return false;
+        } catch (InvalidMessage $e) {
+            if (str_contains($e->getMessage(), 'Registration token is not valid') ||
+                str_contains($e->getMessage(), 'not a valid FCM registration token')) {
+                Log::warning('FCM token invalid, deleting from database', [
+                    'token' => substr($token, 0, 20) . '...',
+                ]);
+                $this->deleteInvalidToken($token);
+            }
+            return false;
         } catch (\Exception $e) {
             Log::error('Failed to send FCM notification', [
                 'token' => substr($token, 0, 20) . '...',
@@ -124,6 +142,21 @@ class FirebaseMessagingService
 
             // Fallback to HTTP method
             return $this->sendViaHttp($token, $notificationData, $data);
+        }
+    }
+
+    /**
+     * Delete invalid token from database.
+     */
+    protected function deleteInvalidToken(string $token): void
+    {
+        try {
+            DeviceToken::where('device_token', $token)->delete();
+        } catch (\Exception $e) {
+            Log::error('Failed to delete invalid token', [
+                'token' => substr($token, 0, 20) . '...',
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -212,6 +245,15 @@ class FirebaseMessagingService
                         'token' => substr($token, 0, 20) . '...',
                         'response' => $responseData,
                     ]);
+
+                    // Check for invalid token errors in legacy API
+                    if (isset($responseData['results'][0]['error'])) {
+                        $error = $responseData['results'][0]['error'];
+                        if (in_array($error, ['NotRegistered', 'InvalidRegistration'])) {
+                            Log::info('Removing invalid token based on HTTP response', ['token' => substr($token, 0, 20) . '...']);
+                            $this->deleteInvalidToken($token);
+                        }
+                    }
                 }
             } else {
                 Log::error('FCM HTTP request error', [

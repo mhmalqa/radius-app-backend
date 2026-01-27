@@ -20,7 +20,7 @@ class AppSettingsSeeder extends Seeder
                 'type' => 'social_link',
                 'label' => 'الواتساب',
                 'label_en' => 'WhatsApp',
-                'description' => 'رابط الواتساب (رقم أو رابط مجموعة)',
+                'description' => 'رابط الواتساب (رقم فريق الدعم)',
                 'is_active' => true,
                 'sort_order' => 1,
             ],

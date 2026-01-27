@@ -6,6 +6,8 @@ use App\Models\PaymentRequest;
 use App\Models\Revenue;
 use App\Models\AppUser;
 use App\Models\UserSubscription;
+use App\Models\LiveStreamPackage;
+use App\Models\LiveStreamSubscription;
 use App\Models\PartialPayment;
 use App\Enums\PaymentRequestStatus;
 use App\Services\RadiusSyncService;
@@ -33,10 +35,12 @@ class PaymentService
         return PaymentRequest::create([
             'user_id' => $user->id,
             'payment_type' => 'online', // Default for user-created payment requests
+            'purpose' => $data['purpose'] ?? 'internet_subscription',
             'amount' => $data['amount'],
             'currency' => $data['currency'] ?? 'USD',
             'period_months' => $data['period_months'] ?? null,
             'plan_name' => $data['plan_name'] ?? null,
+            'meta' => $data['meta'] ?? null,
             'payment_method' => $data['payment_method'] ?? null,
             'payment_method_id' => $data['payment_method_id'] ?? null,
             'transaction_number' => $data['transaction_number'] ?? null,
@@ -116,6 +120,13 @@ class PaymentService
     {
         try {
             $user = $paymentRequest->user;
+            $purpose = $paymentRequest->purpose ?? 'internet_subscription';
+
+            if ($purpose === 'live_stream_subscription') {
+                $this->activateLiveStreamSubscriptionFromPayment($paymentRequest);
+                return;
+            }
+
             $periodMonths = $paymentRequest->period_months;
             $planName = $paymentRequest->plan_name ?? null;
 
@@ -184,6 +195,63 @@ class PaymentService
             ]);
             // Don't throw exception to avoid rolling back the payment approval
         }
+    }
+
+    /**
+     * Activate / renew live stream subscription after approving a payment request.
+     *
+     * Notes:
+     * - Does NOT touch Radius.
+     * - Extends from current active expiration if exists.
+     */
+    protected function activateLiveStreamSubscriptionFromPayment(PaymentRequest $paymentRequest): void
+    {
+        $user = $paymentRequest->user;
+        $meta = $paymentRequest->meta ?? [];
+        $packageId = $meta['package_id'] ?? null;
+
+        if (!$packageId) {
+            Log::warning('Live stream payment approved without package_id', [
+                'payment_request_id' => $paymentRequest->id,
+                'user_id' => $user?->id,
+            ]);
+            return;
+        }
+
+        $package = LiveStreamPackage::find($packageId);
+        if (!$package) {
+            Log::warning('Live stream package not found for approved payment', [
+                'payment_request_id' => $paymentRequest->id,
+                'package_id' => $packageId,
+            ]);
+            return;
+        }
+
+        DB::transaction(function () use ($user, $package, $paymentRequest) {
+            $now = now();
+
+            /** @var LiveStreamSubscription|null $lastActive */
+            $lastActive = LiveStreamSubscription::where('user_id', $user->id)
+                ->where('status', 'active')
+                ->where('expires_at', '>', $now)
+                ->orderByDesc('expires_at')
+                ->first();
+
+            $base = $lastActive ? $lastActive->expires_at->copy() : $now;
+
+            $subscription = LiveStreamSubscription::create([
+                'user_id' => $user->id,
+                'package_id' => $package->id,
+                'payment_request_id' => $paymentRequest->id,
+                'starts_at' => $now,
+                'expires_at' => $base->addDays((int) $package->duration_days),
+                'status' => 'active',
+                'renewed_from_id' => $lastActive?->id,
+            ]);
+
+            // Optional: mark previous as expired when it actually expires; keep status as-is for history.
+            // We do NOT auto-toggle AppUser.live_access here to keep manual overrides separate.
+        });
     }
 
     /**
@@ -267,11 +335,13 @@ class PaymentService
             $paymentRequest = PaymentRequest::create([
                 'user_id' => $user->id,
                 'payment_type' => 'cash',
+                'purpose' => $data['purpose'] ?? 'internet_subscription',
                 'created_by' => $creator->id,
                 'amount' => $data['amount'],
                 'currency' => $data['currency'] ?? 'USD',
                 'period_months' => $data['period_months'] ?? null,
                 'plan_name' => $data['plan_name'] ?? null,
+                'meta' => $data['meta'] ?? null,
                 'payment_date' => $data['payment_date'] ?? now()->toDateString(),
                 'status' => PaymentRequestStatus::APPROVED->value, // Auto-approve cash payments
                 'is_paid' => $isPaid,
