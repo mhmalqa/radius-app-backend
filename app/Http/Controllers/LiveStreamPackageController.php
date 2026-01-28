@@ -9,14 +9,17 @@ use App\Http\Resources\LiveStreamSubscriptionResource;
 use App\Http\Resources\PaymentRequestResource;
 use App\Models\LiveStreamPackage;
 use App\Models\LiveStreamSubscription;
+use App\Models\AppUser;
 use App\Services\PaymentService;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class LiveStreamPackageController extends Controller
 {
     public function __construct(
-        protected PaymentService $paymentService
+        protected PaymentService $paymentService,
+        protected NotificationService $notificationService
     ) {}
 
     /**
@@ -64,17 +67,32 @@ class LiveStreamPackageController extends Controller
     {
         $user = $request->user();
 
-        $subs = LiveStreamSubscription::query()
+        // Get all subscriptions that are active OR expired within last 4 days
+        $allSubs = LiveStreamSubscription::query()
             ->with('package')
             ->where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where('expires_at', '>', now())
+            ->where(function ($q) {
+                $q->where('expires_at', '>', now()) // Active
+                  ->orWhere('expires_at', '>', now()->subDays(4)); // Recently expired (within 4 days)
+            })
             ->orderByDesc('expires_at')
             ->get();
 
+        // Filter: Show all active, but only the LATEST single expired subscription
+        $activeSubs = $allSubs->filter(fn ($sub) => $sub->expires_at > now());
+        $expiredSubs = $allSubs->filter(fn ($sub) => $sub->expires_at <= now());
+
+        // If there are expired subscriptions, take only the most recent one
+        $latestExpired = $expiredSubs->first(); // Already ordered by desc
+
+        $result = $activeSubs;
+        if ($latestExpired) {
+            $result->push($latestExpired);
+        }
+
         return response()->json([
             'success' => true,
-            'data' => LiveStreamSubscriptionResource::collection($subs),
+            'data' => LiveStreamSubscriptionResource::collection($result),
         ]);
     }
 
@@ -105,6 +123,7 @@ class LiveStreamPackageController extends Controller
         if ((float) $package->price <= 0) {
             $now = now();
             $lastActive = LiveStreamSubscription::where('user_id', $user->id)
+                ->where('package_id', $package->id) // Only extend if same package
                 ->where('status', 'active')
                 ->where('expires_at', '>', $now)
                 ->orderByDesc('expires_at')
@@ -194,6 +213,24 @@ class LiveStreamPackageController extends Controller
 
         $data = $request->validated();
         $package = LiveStreamPackage::create($data);
+
+        // Send notification to all active users
+        try {
+            $userIds = AppUser::where('is_active', true)->pluck('id')->toArray();
+
+            if (!empty($userIds)) {
+                $this->notificationService->createNotification([
+                    'title' => "📦 باقة بث جديدة: {$package->name}",
+                    'body' => "تم إضافة باقة جديدة للبث المباشر. تصفح الباقات الآن!",
+                    'type' => 'system',
+                    'priority' => 1,
+                    'action_url' => "/live-stream-packages",
+                    'action_text' => 'عرض الباقات',
+                ], $userIds, 'specific');
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to send new package notification: " . $e->getMessage());
+        }
 
         return response()->json([
             'success' => true,

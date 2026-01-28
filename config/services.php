@@ -44,7 +44,10 @@ return [
     ],
 
     'live_stream' => [
-        'token_ttl_seconds' => env('LIVE_STREAM_TOKEN_TTL_SECONDS', 300),
+        // Default lowered to reduce expiry-related playback cuts.
+        // Can be overridden per environment via LIVE_STREAM_TOKEN_TTL_SECONDS.
+        // 55 minutes = 3300 seconds
+        'token_ttl_seconds' => env('LIVE_STREAM_TOKEN_TTL_SECONDS', 3300),
     ],
 
 ];

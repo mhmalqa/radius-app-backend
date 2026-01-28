@@ -134,8 +134,9 @@ class LiveStreamPlaybackController extends Controller
             ]);
         }
 
-        // For segments/keys: stream binary (small enough for now; avoids exposing upstream)
-        $this->playbackService->touchToken($token, false);
+        // For segments/keys: stream binary.
+        // Extend expiry here too to avoid playback cuts in players that don't refresh playlists frequently.
+        $this->playbackService->touchToken($token, true);
 
         $psr = $resp->toPsrResponse();
         $status = $psr->getStatusCode();

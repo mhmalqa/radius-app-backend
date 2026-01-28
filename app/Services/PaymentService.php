@@ -232,6 +232,7 @@ class PaymentService
 
             /** @var LiveStreamSubscription|null $lastActive */
             $lastActive = LiveStreamSubscription::where('user_id', $user->id)
+                ->where('package_id', $package->id) // Only extend if same package
                 ->where('status', 'active')
                 ->where('expires_at', '>', $now)
                 ->orderByDesc('expires_at')

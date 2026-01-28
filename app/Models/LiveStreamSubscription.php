@@ -19,6 +19,7 @@ class LiveStreamSubscription extends Model
         'status',
         'cancelled_at',
         'renewed_from_id',
+        'notification_flags',
     ];
 
     protected function casts(): array
@@ -27,6 +28,7 @@ class LiveStreamSubscription extends Model
             'starts_at' => 'datetime',
             'expires_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'notification_flags' => 'array',
         ];
     }
 

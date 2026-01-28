@@ -7,6 +7,7 @@ use App\Models\LiveStream;
 use App\Models\LiveStreamAccessToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class LiveStreamPlaybackService
 {
@@ -43,16 +44,34 @@ class LiveStreamPlaybackService
 
     /**
      * Validate playback token and return token record (or null).
+     * Caches the result to reduce DB load (critical for high concurrency).
      */
     public function validateToken(string $token, LiveStream $liveStream): ?LiveStreamAccessToken
     {
         $hash = hash('sha256', $token);
+        $cacheKey = "live_token_{$hash}";
 
-        /** @var LiveStreamAccessToken|null $record */
-        $record = LiveStreamAccessToken::where('token_hash', $hash)->first();
-        if (!$record) {
+        // Try to get ID from cache first
+        $tokenId = Cache::get($cacheKey);
+
+        if ($tokenId === 'invalid') {
             return null;
         }
+
+        if ($tokenId) {
+            // fast retrieval by ID
+            $record = LiveStreamAccessToken::find($tokenId);
+        } else {
+            $record = LiveStreamAccessToken::where('token_hash', $hash)->first();
+        }
+
+        if (!$record) {
+            Cache::put($cacheKey, 'invalid', 60); // Cache negative result
+            return null;
+        }
+
+        // Cache positive result for 60 seconds
+        Cache::put($cacheKey, $record->id, 60);
 
         if ((int) $record->live_stream_id !== (int) $liveStream->id) {
             return null;
@@ -66,9 +85,19 @@ class LiveStreamPlaybackService
     }
 
     /**
-     * Check if the user can watch this live stream (same logic as LiveStreamController::show).
+     * Check if the user can watch this live stream.
+     * Cached for performance (1 minute).
      */
     public function userCanWatch(AppUser $user, LiveStream $liveStream): bool
+    {
+        $cacheKey = "user_{$user->id}_can_watch_stream_{$liveStream->id}";
+
+        return Cache::remember($cacheKey, 60, function () use ($user, $liveStream) {
+            return $this->resolveUserCanWatch($user, $liveStream);
+        });
+    }
+
+    protected function resolveUserCanWatch(AppUser $user, LiveStream $liveStream): bool
     {
         if ($user->isAdmin()) {
             return true;
@@ -106,10 +135,18 @@ class LiveStreamPlaybackService
     }
 
     /**
-     * Mark token as used and optionally extend expiration for playlists.
+     * Mark token as used and optionally extend expiration.
+     * Throttled: updates DB at most once per minute per token to prevent hammering.
      */
     public function touchToken(LiveStreamAccessToken $token, bool $extendExpiry = false): void
     {
+        $throttleKey = "live_token_touch_{$token->id}";
+
+        // If recently updated, skip DB write
+        if (Cache::has($throttleKey)) {
+            return;
+        }
+
         try {
             $update = [
                 'last_used_at' => now(),
@@ -120,6 +157,10 @@ class LiveStreamPlaybackService
             }
 
             $token->update($update);
+
+            // Lock updates for this token for 60 seconds
+            Cache::put($throttleKey, true, 60);
+
         } catch (\Throwable $e) {
             Log::warning('Failed to touch live stream token', [
                 'token_id' => $token->id,

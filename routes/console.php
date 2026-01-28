@@ -21,16 +21,19 @@ Schedule::command('notifications:live-stream-day')->dailyAt('08:00'); // Send at
 // Live stream packages: mark expired subscriptions for clean admin reporting
 Schedule::command('live-stream:expire-subscriptions')->hourly();
 
+// Live stream package notifications (expiry, renewal reminders)
+Schedule::command('notifications:live-stream-packages')->everyFiveMinutes();
+
 // Database backups - check schedule from app_settings
 Schedule::call(function () {
     $schedule = \Illuminate\Support\Facades\DB::table('app_settings')
         ->where('key', 'backup_schedule')
         ->value('value');
-    
+
     $time = \Illuminate\Support\Facades\DB::table('app_settings')
         ->where('key', 'backup_time')
         ->value('value');
-    
+
     if ($schedule && $time) {
         $currentTime = now()->format('H:i');
         if ($currentTime === $time) {
@@ -43,7 +46,7 @@ Schedule::call(function () {
             } elseif ($schedule === 'monthly' && now()->day === 1) { // First day of month
                 $shouldRun = true;
             }
-            
+
             if ($shouldRun) {
                 Artisan::call('db:backup');
             }
